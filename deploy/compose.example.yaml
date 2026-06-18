@@ -1,0 +1,44 @@
+# TidyDAV — example Docker Compose deployment.
+#
+#   cd deploy
+#   cp .env.example .env        # then set TIDYDAV_SECRET_KEY and TIDYDAV_BASE_URL
+#   docker compose -f compose.example.yaml up -d
+#
+# Put TidyDAV behind a reverse proxy (Caddy, Traefik, nginx) that terminates TLS
+# and forwards to port 8080. Set TIDYDAV_BASE_URL to the public https URL.
+
+services:
+  tidydav:
+    container_name: tidydav
+    # Build from source (default, works out of the box from a clone):
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    # Or use a published image instead of building:
+    #image: ghcr.io/norrodar/tidydav:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Defaults shown here; override in .env. Listed so the container is
+      # self-documenting even without an .env file present.
+      TIDYDAV_DB_PATH: /data/tidydav.db
+      TIDYDAV_LISTEN_ADDR: ":8080"
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persist the SQLite database. Make sure the host directory is owned by
+      # PUID:PGID (or let the entrypoint chown it on first start).
+      - tidydav-data:/data
+    healthcheck:
+      test: ["CMD", "/tidydav", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  tidydav-data:

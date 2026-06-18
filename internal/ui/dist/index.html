@@ -1,0 +1,42 @@
+<!doctype html>
+<!--
+  Placeholder kept in version control so `//go:embed all:dist` and `go build`
+  work without a frontend build. The real SvelteKit build (npm run build, run
+  by the Dockerfile and CI) overwrites this file and adds the _app/ assets.
+-->
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>TidyDAV</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #0a0a0c;
+        color: rgba(255, 255, 255, 0.92);
+        font-family: system-ui, sans-serif;
+        text-align: center;
+      }
+      .accent {
+        color: #0a84ff;
+      }
+      p {
+        color: rgba(255, 255, 255, 0.58);
+        font-size: 0.9rem;
+      }
+      code {
+        font-family: ui-monospace, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <h1>Tidy<span class="accent">DAV</span></h1>
+      <p>Frontend not built. Run <code>npm run build</code> in <code>web/</code>.</p>
+    </div>
+  </body>
+</html>
