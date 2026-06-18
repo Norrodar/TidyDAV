@@ -7,6 +7,9 @@
 <div class="app">
   <header class="topbar">
     <a class="brand" href="/">Tidy<span class="brand-accent">DAV</span></a>
+    <nav class="nav">
+      <a href="/feeds">Feeds</a>
+    </nav>
   </header>
   <main class="content">
     {@render children()}
@@ -43,6 +46,22 @@
 
   .brand-accent {
     color: var(--accent);
+  }
+
+  .nav {
+    display: flex;
+    gap: var(--space-4);
+    margin-left: var(--space-6);
+  }
+
+  .nav a {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+  }
+
+  .nav a:hover {
+    color: var(--text-primary);
   }
 
   .content {

@@ -24,5 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Feed management API (`/api/feeds`, session-authenticated): list/create/get/update/delete
   owner-scoped feeds plus a `/api/feeds/preview` endpoint returning original-vs-transformed
   events for a diff view. Secrets/passwords are write-only in the API.
+- Web UI for feeds: list view with copyable ICS URLs, a create/edit form with a source
+  list and a per-type rule editor, and a live original-vs-transformed preview.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main

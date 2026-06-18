@@ -68,14 +68,88 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+// ── Feeds ────────────────────────────────────────────────────────────────────
+
+export interface FeedSource {
+  url: string;
+  username?: string;
+  password?: string; // write-only
+  hasPassword?: boolean; // read-only
+}
+
+export type RuleType = 'filter' | 'dedup' | 'rename' | 'strip' | 'timezone' | 'expire';
+
+export interface RuleConfig {
+  type: RuleType;
+  matchMode?: 'substring' | 'regex';
+  pattern?: string;
+  filterMode?: 'blacklist' | 'whitelist';
+  fields?: string[];
+  field?: string;
+  replacement?: string;
+  keyFields?: string[];
+  target?: string;
+  defaultTz?: string;
+  days?: number;
+}
+
+export interface Feed {
+  id: string;
+  name: string;
+  secret: string;
+  icsUrl: string;
+  sources: FeedSource[];
+  rules: RuleConfig[];
+  ttlSeconds: number;
+  basicAuthUser: string;
+  basicAuthEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FeedInput {
+  name: string;
+  sources: FeedSource[];
+  rules: RuleConfig[];
+  ttlSeconds: number;
+  basicAuthUser: string;
+  basicAuthPassword?: string;
+}
+
+export interface EventSummary {
+  uid: string;
+  summary: string;
+  start: string;
+  location: string;
+  description: string;
+}
+
+export interface PreviewResult {
+  original: EventSummary[];
+  transformed: EventSummary[];
+}
+
+function jsonBody(method: string, body: unknown): RequestInit {
+  return {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  };
+}
+
 export const api = {
   health: () => request<HealthResponse>('/health'),
   session: () => request<SessionResponse>('/api/session'),
   login: (email: string, password: string) =>
-    request<SessionResponse>('/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    }),
-  logout: () => request<void>('/auth/logout', { method: 'POST' })
+    request<SessionResponse>('/auth/login', jsonBody('POST', { email, password })),
+  logout: () => request<void>('/auth/logout', { method: 'POST' }),
+
+  feeds: {
+    list: () => request<Feed[]>('/api/feeds'),
+    get: (id: string) => request<Feed>(`/api/feeds/${id}`),
+    create: (input: FeedInput) => request<Feed>('/api/feeds', jsonBody('POST', input)),
+    update: (id: string, input: FeedInput) => request<Feed>(`/api/feeds/${id}`, jsonBody('PUT', input)),
+    remove: (id: string) => request<void>(`/api/feeds/${id}`, { method: 'DELETE' }),
+    preview: (input: FeedInput) => request<PreviewResult>('/api/feeds/preview', jsonBody('POST', input))
+  }
 };
