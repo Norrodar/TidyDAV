@@ -9,6 +9,8 @@ import (
 
 	"github.com/Norrodar/TidyDAV/internal/auth"
 	"github.com/Norrodar/TidyDAV/internal/config"
+	"github.com/Norrodar/TidyDAV/internal/feed"
+	"github.com/Norrodar/TidyDAV/internal/proxy"
 	"github.com/Norrodar/TidyDAV/internal/store"
 )
 
@@ -19,6 +21,7 @@ type App struct {
 	Log     *slog.Logger
 	Store   *store.Store
 	Auth    *auth.Service
+	Feed    *feed.Service
 	Version string
 }
 
@@ -38,11 +41,14 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, version stri
 		return nil, fmt.Errorf("init auth: %w", err)
 	}
 
+	feedSvc := feed.NewService(proxy.NewFetcher(st, log), log)
+
 	return &App{
 		Config:  cfg,
 		Log:     log,
 		Store:   st,
 		Auth:    authSvc,
+		Feed:    feedSvc,
 		Version: version,
 	}, nil
 }

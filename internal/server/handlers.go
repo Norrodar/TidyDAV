@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"github.com/Norrodar/TidyDAV/internal/auth"
 	"github.com/Norrodar/TidyDAV/internal/config"
 	"github.com/Norrodar/TidyDAV/internal/store"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const oidcStateCookie = "tidydav_oidc_state"
@@ -242,4 +244,46 @@ func randomToken() (string, error) {
 
 func secureCookies(cfg *config.Config) bool {
 	return strings.HasPrefix(cfg.BaseURL, "https://")
+}
+
+// handleICS serves a transformed feed at /ics/{secret}. It is secured by the
+// secret-id in the path and, optionally, HTTP Basic Auth — never by session
+// cookies, since calendar clients cannot do OIDC.
+func (s *Server) handleICS(w http.ResponseWriter, r *http.Request) {
+	f, err := s.app.Store.FeedBySecret(r.Context(), r.PathValue("secret"))
+	if errors.Is(err, store.ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		s.serverError(w, "feed lookup", err)
+		return
+	}
+
+	if f.BasicAuthHash != "" && !validBasicAuth(r, f) {
+		w.Header().Set("WWW-Authenticate", `Basic realm="TidyDAV"`)
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	body, err := s.app.Feed.Render(r.Context(), f)
+	if err != nil {
+		s.app.Log.Error("feed render failed", "feed", f.ID, "error", err)
+		writeError(w, http.StatusBadGateway, "feed could not be rendered")
+		return
+	}
+	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(body)
+}
+
+func validBasicAuth(r *http.Request, f *store.Feed) bool {
+	user, pass, ok := r.BasicAuth()
+	if !ok {
+		return false
+	}
+	if subtle.ConstantTimeCompare([]byte(user), []byte(f.BasicAuthUser)) != 1 {
+		return false
+	}
+	return bcrypt.CompareHashAndPassword([]byte(f.BasicAuthHash), []byte(pass)) == nil
 }

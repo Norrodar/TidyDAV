@@ -14,9 +14,16 @@ import (
 	"github.com/Norrodar/TidyDAV/internal/app"
 	"github.com/Norrodar/TidyDAV/internal/config"
 	"github.com/Norrodar/TidyDAV/internal/server"
+	"github.com/Norrodar/TidyDAV/internal/store"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func newTestServer(t *testing.T) *server.Server {
+	srv, _ := newTestServerWithApp(t)
+	return srv
+}
+
+func newTestServerWithApp(t *testing.T) (*server.Server, *app.App) {
 	t.Helper()
 	cfg := &config.Config{
 		SecretKey:         "k",
@@ -37,7 +44,7 @@ func newTestServer(t *testing.T) *server.Server {
 	if err != nil {
 		t.Fatalf("server.New() error: %v", err)
 	}
-	return srv
+	return srv, a
 }
 
 func TestHealth(t *testing.T) {
@@ -133,5 +140,86 @@ func TestSPAFallback(t *testing.T) {
 	}
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("content-type = %q, want text/html", ct)
+	}
+}
+
+const icsUpstream = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//up//EN\r\n" +
+	"BEGIN:VEVENT\r\nUID:1@up\r\nDTSTAMP:20260101T000000Z\r\nSUMMARY:Keep\r\nDESCRIPTION:secret\r\nEND:VEVENT\r\n" +
+	"END:VCALENDAR\r\n"
+
+func TestICSEndpoint(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(icsUpstream))
+	}))
+	defer upstream.Close()
+
+	srv, a := newTestServerWithApp(t)
+	ctx := context.Background()
+	if err := a.Store.CreateUser(ctx, &store.User{ID: "u", Kind: "password"}); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := a.Store.CreateFeed(ctx, &store.Feed{
+		ID: "f", UserID: "u", Name: "n", Secret: "topsecret", TTLSeconds: 0,
+		Sources: []store.FeedSource{{URL: upstream.URL}},
+		Rules:   []byte(`[{"type":"strip","fields":["DESCRIPTION"]}]`),
+	}); err != nil {
+		t.Fatalf("CreateFeed: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ics/topsecret", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/calendar") {
+		t.Errorf("content-type = %q, want text/calendar", ct)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "SUMMARY:Keep") || strings.Contains(body, "secret") {
+		t.Errorf("unexpected ICS body:\n%s", body)
+	}
+
+	// Unknown secret -> 404.
+	rec404 := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec404, httptest.NewRequest(http.MethodGet, "/ics/nope", nil))
+	if rec404.Code != http.StatusNotFound {
+		t.Errorf("unknown secret status = %d, want 404", rec404.Code)
+	}
+}
+
+func TestICSEndpointBasicAuth(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(icsUpstream))
+	}))
+	defer upstream.Close()
+
+	srv, a := newTestServerWithApp(t)
+	ctx := context.Background()
+	if err := a.Store.CreateUser(ctx, &store.User{ID: "u", Kind: "password"}); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	hash, _ := bcrypt.GenerateFromPassword([]byte("pw"), bcrypt.MinCost)
+	if err := a.Store.CreateFeed(ctx, &store.Feed{
+		ID: "f", UserID: "u", Name: "n", Secret: "protected", TTLSeconds: 0,
+		Sources:       []store.FeedSource{{URL: upstream.URL}},
+		BasicAuthUser: "cal",
+		BasicAuthHash: string(hash),
+	}); err != nil {
+		t.Fatalf("CreateFeed: %v", err)
+	}
+
+	// No credentials -> 401.
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/ics/protected", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("without auth status = %d, want 401", rec.Code)
+	}
+
+	// Correct credentials -> 200.
+	rec2 := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ics/protected", nil)
+	req.SetBasicAuth("cal", "pw")
+	srv.Handler().ServeHTTP(rec2, req)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("with auth status = %d, want 200 (%s)", rec2.Code, rec2.Body.String())
 	}
 }

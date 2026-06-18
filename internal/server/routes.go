@@ -22,6 +22,9 @@ func (s *Server) routes(mux *http.ServeMux) error {
 	mux.HandleFunc("GET /auth/oidc/login", s.handleOIDCLogin)
 	mux.HandleFunc("GET /auth/oidc/callback", s.handleOIDCCallback)
 
+	// Transformed ICS output, secured by secret-id (no session).
+	mux.HandleFunc("GET /ics/{secret}", s.handleICS)
+
 	// Everything else: the embedded SPA (static assets + index.html fallback).
 	uiHandler, err := ui.Handler()
 	if err != nil {

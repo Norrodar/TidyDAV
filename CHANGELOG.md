@@ -17,5 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   matching.
 - ICS proxy with caching (`internal/proxy`, `feed_cache` table): TTL-honored upstream
   fetch with ETag revalidation and stale-on-error fallback to the last good copy.
+- Output feeds (`feeds` table, `internal/feed`): configurable feed definitions served at
+  `/ics/<secret>` — fetch and merge multiple sources (de-duplicated by UID), apply the
+  rule pipeline and serialize, secured by secret-id with optional HTTP Basic Auth. Rule
+  pipelines are built from JSON config (`pipeline.RuleConfig`).
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main

@@ -64,11 +64,17 @@ func NewFetcher(cache Cache, log *slog.Logger) *Fetcher {
 	}
 }
 
-// Fetch returns the ICS body for url. If the cached copy is younger than ttl it
-// is returned without a network call. Otherwise the upstream is fetched (using
-// ETag revalidation); on success the cache is refreshed, and on failure the last
-// good cached copy is served (stale-on-error).
+// Fetch is FetchAuth without upstream credentials.
 func (f *Fetcher) Fetch(ctx context.Context, url string, ttl time.Duration) ([]byte, Source, error) {
+	return f.FetchAuth(ctx, url, ttl, "", "")
+}
+
+// FetchAuth returns the ICS body for url, sending HTTP Basic Auth when username
+// is non-empty. If the cached copy is younger than ttl it is returned without a
+// network call. Otherwise the upstream is fetched (using ETag revalidation); on
+// success the cache is refreshed, and on failure the last good cached copy is
+// served (stale-on-error).
+func (f *Fetcher) FetchAuth(ctx context.Context, url string, ttl time.Duration, username, password string) ([]byte, Source, error) {
 	cached, err := f.cache.GetCachedFeed(ctx, url)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return nil, SourceNone, fmt.Errorf("proxy: read cache: %w", err)
@@ -79,7 +85,7 @@ func (f *Fetcher) Fetch(ctx context.Context, url string, ttl time.Duration) ([]b
 		return cached.Body, SourceCacheFresh, nil
 	}
 
-	body, etag, fetchErr := f.fetchUpstream(ctx, url, cached)
+	body, etag, fetchErr := f.fetchUpstream(ctx, url, cached, username, password)
 	if fetchErr != nil {
 		if hasCache {
 			f.log.Warn("upstream fetch failed; serving stale cache", "url", url, "error", fetchErr)
@@ -105,10 +111,13 @@ func (f *Fetcher) Fetch(ctx context.Context, url string, ttl time.Duration) ([]b
 
 // fetchUpstream performs the HTTP GET. A 304 response returns a nil body and the
 // existing ETag, signalling the caller to reuse the cached body.
-func (f *Fetcher) fetchUpstream(ctx context.Context, url string, cached *store.CachedFeed) ([]byte, string, error) {
+func (f *Fetcher) fetchUpstream(ctx context.Context, url string, cached *store.CachedFeed, username, password string) ([]byte, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, "", err
+	}
+	if username != "" {
+		req.SetBasicAuth(username, password)
 	}
 	if cached != nil && cached.ETag != "" {
 		req.Header.Set("If-None-Match", cached.ETag)
