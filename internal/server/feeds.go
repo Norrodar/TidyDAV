@@ -114,6 +114,7 @@ func (s *Server) handleCreateFeed(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, "create feed", err)
 		return
 	}
+	s.app.Audit.Record(r.Context(), u, "feed.create", f.ID, f.Name)
 	writeJSON(w, http.StatusCreated, s.toFeedResponse(f))
 }
 
@@ -165,6 +166,7 @@ func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, "update feed", err)
 		return
 	}
+	s.app.Audit.Record(r.Context(), u, "feed.update", existing.ID, existing.Name)
 	writeJSON(w, http.StatusOK, s.toFeedResponse(existing))
 }
 
@@ -182,6 +184,7 @@ func (s *Server) handleDeleteFeed(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, "delete feed", err)
 		return
 	}
+	s.app.Audit.Record(r.Context(), u, "feed.delete", r.PathValue("id"), "")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -223,6 +226,51 @@ func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) (*store.Use
 		return nil, false
 	}
 	return u, true
+}
+
+func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (*store.User, bool) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return nil, false
+	}
+	if !u.IsAdmin {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return nil, false
+	}
+	return u, true
+}
+
+type auditEntryDTO struct {
+	ID        int64  `json:"id"`
+	UserEmail string `json:"userEmail"`
+	Action    string `json:"action"`
+	Target    string `json:"target"`
+	Detail    string `json:"detail"`
+	CreatedAt string `json:"createdAt"`
+}
+
+// handleListAudit returns the audit log (admin only).
+func (s *Server) handleListAudit(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireAdmin(w, r); !ok {
+		return
+	}
+	entries, err := s.app.Store.ListAuditEntries(r.Context(), 200)
+	if err != nil {
+		s.serverError(w, "list audit", err)
+		return
+	}
+	out := make([]auditEntryDTO, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, auditEntryDTO{
+			ID:        e.ID,
+			UserEmail: e.UserEmail,
+			Action:    e.Action,
+			Target:    e.Target,
+			Detail:    e.Detail,
+			CreatedAt: e.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // ownedFeed loads the feed in the path and ensures it belongs to u.

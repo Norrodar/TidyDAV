@@ -188,3 +188,24 @@ func TestSessionRoundTrip(t *testing.T) {
 		t.Errorf("no-cookie error = %v, want ErrNotFound", err)
 	}
 }
+
+func TestFirstUserIsAdmin(t *testing.T) {
+	svc := newService(t, config.AccessAuth, true)
+	ctx := context.Background()
+
+	first, err := svc.Register(ctx, "first@example.com", "pw123456")
+	if err != nil {
+		t.Fatalf("Register first: %v", err)
+	}
+	if !first.IsAdmin {
+		t.Error("first user should be admin")
+	}
+
+	second, err := svc.Register(ctx, "second@example.com", "pw123456")
+	if err != nil {
+		t.Fatalf("Register second: %v", err)
+	}
+	if second.IsAdmin {
+		t.Error("second user should not be admin")
+	}
+}

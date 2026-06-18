@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/Norrodar/TidyDAV/internal/audit"
 	"github.com/Norrodar/TidyDAV/internal/auth"
 	"github.com/Norrodar/TidyDAV/internal/config"
 	"github.com/Norrodar/TidyDAV/internal/feed"
@@ -22,6 +23,7 @@ type App struct {
 	Store   *store.Store
 	Auth    *auth.Service
 	Feed    *feed.Service
+	Audit   *audit.Logger
 	Version string
 }
 
@@ -49,6 +51,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, version stri
 		Store:   st,
 		Auth:    authSvc,
 		Feed:    feedSvc,
+		Audit:   audit.New(st, log),
 		Version: version,
 	}, nil
 }

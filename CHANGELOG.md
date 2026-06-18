@@ -28,5 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list and a per-type rule editor, and a live original-vs-transformed preview.
 - Notifications (`internal/notify`): webhook, ntfy and Gotify senders with a
   failure-tolerant dispatcher and config constructor.
+- Audit log (`audit_log` table, `internal/audit`): admin-visible record of feed
+  create/update/delete. The first registered user becomes admin; read via
+  `GET /api/audit`.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main

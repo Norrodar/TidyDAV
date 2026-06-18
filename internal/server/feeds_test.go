@@ -163,3 +163,33 @@ func TestFeedPreview(t *testing.T) {
 		t.Errorf("transformed description = %v, want empty", prev.Transformed[0]["description"])
 	}
 }
+
+func TestAuditRequiresAdmin(t *testing.T) {
+	srv := newTestServer(t)
+	admin := register(t, srv, "admin@example.com") // first user => admin
+
+	if rec := do(t, srv, http.MethodGet, "/api/audit", "", admin); rec.Code != http.StatusOK {
+		t.Fatalf("admin audit status %d, want 200", rec.Code)
+	}
+	user := register(t, srv, "user@example.com")
+	if rec := do(t, srv, http.MethodGet, "/api/audit", "", user); rec.Code != http.StatusForbidden {
+		t.Errorf("non-admin audit status %d, want 403", rec.Code)
+	}
+	if rec := do(t, srv, http.MethodGet, "/api/audit", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("no-auth audit status %d, want 401", rec.Code)
+	}
+}
+
+func TestFeedActionsAreAudited(t *testing.T) {
+	srv := newTestServer(t)
+	admin := register(t, srv, "admin@example.com") // first user => admin
+
+	rec := do(t, srv, http.MethodPost, "/api/feeds", `{"name":"Audited","sources":[]}`, admin)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = do(t, srv, http.MethodGet, "/api/audit", "", admin)
+	if !strings.Contains(rec.Body.String(), "feed.create") || !strings.Contains(rec.Body.String(), "Audited") {
+		t.Errorf("audit missing create entry: %s", rec.Body.String())
+	}
+}

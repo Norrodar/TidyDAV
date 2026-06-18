@@ -72,6 +72,15 @@ func (s *Store) userBy(ctx context.Context, column, value string) (*User, error)
 	return u, nil
 }
 
+// CountUsers returns the total number of users.
+func (s *Store) CountUsers(ctx context.Context) (int, error) {
+	var n int
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(1) FROM users").Scan(&n); err != nil {
+		return 0, fmt.Errorf("count users: %w", err)
+	}
+	return n, nil
+}
+
 func scanUser(sc rowScanner) (*User, error) {
 	var (
 		u         User

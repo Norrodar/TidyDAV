@@ -50,11 +50,17 @@ func (s *Service) Register(ctx context.Context, email, password string) (*store.
 	if err != nil {
 		return nil, err
 	}
+	// The first registered user becomes the admin.
+	count, err := s.store.CountUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
 	u := &store.User{
 		ID:           id,
 		Kind:         "password",
 		Email:        sql.NullString{String: email, Valid: true},
 		PasswordHash: sql.NullString{String: hash, Valid: true},
+		IsAdmin:      count == 0,
 	}
 	if err := s.store.CreateUser(ctx, u); err != nil {
 		return nil, err
