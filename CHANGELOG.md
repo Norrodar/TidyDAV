@@ -26,5 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   events for a diff view. Secrets/passwords are write-only in the API.
 - Web UI for feeds: list view with copyable ICS URLs, a create/edit form with a source
   list and a per-type rule editor, and a live original-vs-transformed preview.
+- Notifications (`internal/notify`): webhook, ntfy and Gotify senders with a
+  failure-tolerant dispatcher and config constructor.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main
