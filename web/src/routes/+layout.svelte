@@ -1,14 +1,38 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import '$lib/styles/global.css';
+  import { api } from '$lib/api';
+  import { session } from '$lib/state/session.svelte';
 
   let { children } = $props();
+
+  onMount(() => {
+    session.refresh();
+  });
+
+  async function logout() {
+    try {
+      await api.logout();
+    } catch {
+      /* ignore */
+    }
+    await session.refresh();
+    await goto('/');
+  }
 </script>
 
 <div class="app">
   <header class="topbar">
     <a class="brand" href="/">Tidy<span class="brand-accent">DAV</span></a>
     <nav class="nav">
-      <a href="/feeds">Feeds</a>
+      {#if session.authenticated}
+        <a href="/feeds">Feeds</a>
+        {#if session.user?.isAdmin}<a href="/audit">Audit</a>{/if}
+        <button class="linklike" onclick={logout}>Sign out</button>
+      {:else}
+        <a href="/login">Sign in</a>
+      {/if}
     </nav>
   </header>
   <main class="content">
@@ -61,6 +85,20 @@
   }
 
   .nav a:hover {
+    color: var(--text-primary);
+  }
+
+  .linklike {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+  }
+
+  .linklike:hover {
     color: var(--text-primary);
   }
 

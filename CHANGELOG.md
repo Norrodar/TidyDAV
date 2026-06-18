@@ -31,5 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Audit log (`audit_log` table, `internal/audit`): admin-visible record of feed
   create/update/delete. The first registered user becomes admin; read via
   `GET /api/audit`.
+- Web UI: admin audit-log page and a session-aware navigation (sign in/out, Feeds,
+  Audit) backed by the session store.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main

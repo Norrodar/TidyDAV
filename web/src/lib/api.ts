@@ -129,6 +129,15 @@ export interface PreviewResult {
   transformed: EventSummary[];
 }
 
+export interface AuditEntry {
+  id: number;
+  userEmail: string;
+  action: string;
+  target: string;
+  detail: string;
+  createdAt: string;
+}
+
 function jsonBody(method: string, body: unknown): RequestInit {
   return {
     method,
@@ -151,5 +160,9 @@ export const api = {
     update: (id: string, input: FeedInput) => request<Feed>(`/api/feeds/${id}`, jsonBody('PUT', input)),
     remove: (id: string) => request<void>(`/api/feeds/${id}`, { method: 'DELETE' }),
     preview: (input: FeedInput) => request<PreviewResult>('/api/feeds/preview', jsonBody('POST', input))
+  },
+
+  audit: {
+    list: () => request<AuditEntry[]>('/api/audit')
   }
 };
