@@ -15,5 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   serialize helpers and sequential rules — filter (black/whitelist), dedup, rename,
   field strip, timezone normalization and expiry — with substring ("DAU") or regex
   matching.
+- ICS proxy with caching (`internal/proxy`, `feed_cache` table): TTL-honored upstream
+  fetch with ETag revalidation and stale-on-error fallback to the last good copy.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main
