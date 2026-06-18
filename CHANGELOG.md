@@ -21,5 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/ics/<secret>` — fetch and merge multiple sources (de-duplicated by UID), apply the
   rule pipeline and serialize, secured by secret-id with optional HTTP Basic Auth. Rule
   pipelines are built from JSON config (`pipeline.RuleConfig`).
+- Feed management API (`/api/feeds`, session-authenticated): list/create/get/update/delete
+  owner-scoped feeds plus a `/api/feeds/preview` endpoint returning original-vs-transformed
+  events for a diff view. Secrets/passwords are write-only in the API.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main

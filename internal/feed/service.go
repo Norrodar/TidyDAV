@@ -32,15 +32,63 @@ func NewService(fetcher *proxy.Fetcher, log *slog.Logger) *Service {
 	return &Service{fetcher: fetcher, log: log}
 }
 
-// Render fetches every source (tolerating individual failures via the proxy's
-// stale-on-error cache), merges their events de-duplicated by UID, applies the
-// feed's rule pipeline and returns the serialized ICS.
+// EventSummary is a compact view of an event for previews/diffs.
+type EventSummary struct {
+	UID         string `json:"uid"`
+	Summary     string `json:"summary"`
+	Start       string `json:"start"`
+	Location    string `json:"location"`
+	Description string `json:"description"`
+}
+
+// Render fetches and merges the feed's sources, applies the rule pipeline and
+// returns the serialized ICS.
 func (s *Service) Render(ctx context.Context, f *store.Feed) ([]byte, error) {
+	merged, err := s.merge(ctx, f)
+	if err != nil {
+		return nil, err
+	}
 	p, err := buildPipeline(f.Rules)
 	if err != nil {
 		return nil, fmt.Errorf("feed %s: %w", f.ID, err)
 	}
+	if err := p.Apply(merged); err != nil {
+		return nil, fmt.Errorf("feed %s: %w", f.ID, err)
+	}
+	if len(merged.Children) == 0 {
+		return []byte(emptyCalendar), nil
+	}
+	var buf bytes.Buffer
+	if err := ics.Serialize(&buf, merged); err != nil {
+		return nil, fmt.Errorf("feed %s: serialize: %w", f.ID, err)
+	}
+	return buf.Bytes(), nil
+}
 
+// Preview returns the merged events before and after the rule pipeline, for a
+// diff view. It does not require the feed to be persisted.
+func (s *Service) Preview(ctx context.Context, f *store.Feed) (original, transformed []EventSummary, err error) {
+	merged, err := s.merge(ctx, f)
+	if err != nil {
+		return nil, nil, err
+	}
+	original = summarize(merged) // snapshot before mutation
+
+	p, err := buildPipeline(f.Rules)
+	if err != nil {
+		return nil, nil, fmt.Errorf("feed %s: %w", f.ID, err)
+	}
+	if err := p.Apply(merged); err != nil {
+		return nil, nil, fmt.Errorf("feed %s: %w", f.ID, err)
+	}
+	transformed = summarize(merged)
+	return original, transformed, nil
+}
+
+// merge fetches every source (tolerating individual failures via the proxy's
+// stale-on-error cache) and returns one calendar with their events, de-duplicated
+// by UID.
+func (s *Service) merge(ctx context.Context, f *store.Feed) (*ical.Calendar, error) {
 	ttl := time.Duration(f.TTLSeconds) * time.Second
 	merged := ical.NewCalendar()
 	merged.Props.SetText(ical.PropProductID, "-//TidyDAV//EN")
@@ -73,20 +121,26 @@ func (s *Service) Render(ctx context.Context, f *store.Feed) ([]byte, error) {
 	if fetched == 0 && len(f.Sources) > 0 {
 		return nil, fmt.Errorf("feed %s: no source could be fetched", f.ID)
 	}
+	return merged, nil
+}
 
-	if err := p.Apply(merged); err != nil {
-		return nil, fmt.Errorf("feed %s: %w", f.ID, err)
+func summarize(cal *ical.Calendar) []EventSummary {
+	events := cal.Events()
+	out := make([]EventSummary, 0, len(events))
+	for _, e := range events {
+		var start string
+		if t, err := e.DateTimeStart(time.UTC); err == nil && !t.IsZero() {
+			start = t.Format(time.RFC3339)
+		}
+		out = append(out, EventSummary{
+			UID:         ics.Text(e, "UID"),
+			Summary:     ics.Text(e, ics.FieldSummary),
+			Start:       start,
+			Location:    ics.Text(e, ics.FieldLocation),
+			Description: ics.Text(e, ics.FieldDescription),
+		})
 	}
-
-	if len(merged.Children) == 0 {
-		return []byte(emptyCalendar), nil
-	}
-
-	var buf bytes.Buffer
-	if err := ics.Serialize(&buf, merged); err != nil {
-		return nil, fmt.Errorf("feed %s: serialize: %w", f.ID, err)
-	}
-	return buf.Bytes(), nil
+	return out
 }
 
 func buildPipeline(rules json.RawMessage) (*pipeline.Pipeline, error) {
