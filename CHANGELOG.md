@@ -11,5 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial project scaffold: Go backend skeleton, embedded SvelteKit frontend, SQLite
   store with migrations, configuration system and authentication groundwork.
+- ICS transform pipeline (`internal/ics`, `internal/pipeline`) over go-ical: parse/
+  serialize helpers and sequential rules — filter (black/whitelist), dedup, rename,
+  field strip, timezone normalization and expiry — with substring ("DAU") or regex
+  matching.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main
