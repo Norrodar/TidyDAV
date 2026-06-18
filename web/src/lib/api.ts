@@ -151,6 +151,8 @@ export const api = {
   session: () => request<SessionResponse>('/api/session'),
   login: (email: string, password: string) =>
     request<SessionResponse>('/auth/login', jsonBody('POST', { email, password })),
+  register: (email: string, password: string) =>
+    request<SessionResponse>('/auth/register', jsonBody('POST', { email, password })),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
 
   feeds: {

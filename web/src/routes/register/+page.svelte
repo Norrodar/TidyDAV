@@ -13,10 +13,10 @@
     submitting = true;
     error = null;
     try {
-      session.apply(await api.login(email, password));
+      session.apply(await api.register(email, password));
       await goto('/feeds');
     } catch (err) {
-      error = err instanceof ApiError ? err.message : 'Login failed';
+      error = err instanceof ApiError ? err.message : 'Registration failed';
     } finally {
       submitting = false;
     }
@@ -25,8 +25,8 @@
 
 <div class="auth">
   <div class="card">
-    <h1>Sign in</h1>
-    <p class="subtitle">Welcome back.</p>
+    <h1>Create account</h1>
+    <p class="subtitle">Set up your TidyDAV login.</p>
 
     <form onsubmit={submit}>
       <label>
@@ -39,7 +39,8 @@
           class="input"
           type="password"
           bind:value={password}
-          autocomplete="current-password"
+          autocomplete="new-password"
+          minlength="8"
           required
         />
       </label>
@@ -47,17 +48,11 @@
       {#if error}<p class="error">{error}</p>{/if}
 
       <button class="button" type="submit" disabled={submitting}>
-        {submitting ? 'Signing in…' : 'Sign in'}
+        {submitting ? 'Creating…' : 'Create account'}
       </button>
     </form>
 
-    <div class="divider"><span>or</span></div>
-
-    <a class="button button-secondary" href="/auth/oidc/login">Continue with SSO</a>
-
-    {#if session.registrationEnabled}
-      <p class="hint">No account? <a href="/register">Create one</a></p>
-    {/if}
+    <p class="hint">Already have an account? <a href="/login">Sign in</a></p>
   </div>
 </div>
 
@@ -67,28 +62,23 @@
     justify-content: center;
     padding-top: var(--space-7);
   }
-
   .card {
     width: 100%;
     max-width: 380px;
   }
-
   h1 {
     font-size: var(--text-2xl);
   }
-
   .subtitle {
     margin: var(--space-2) 0 var(--space-6);
     color: var(--text-secondary);
     font-size: var(--text-sm);
   }
-
   form {
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
   }
-
   label {
     display: flex;
     flex-direction: column;
@@ -96,34 +86,14 @@
     font-size: var(--text-sm);
     color: var(--text-secondary);
   }
-
   .button[type='submit'] {
     margin-top: var(--space-2);
   }
-
   .error {
     margin: 0;
     color: var(--danger);
     font-size: var(--text-sm);
   }
-
-  .divider {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    margin: var(--space-5) 0;
-    color: var(--text-tertiary);
-    font-size: var(--text-xs);
-  }
-
-  .divider::before,
-  .divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--separator);
-  }
-
   .hint {
     margin: var(--space-4) 0 0;
     text-align: center;
