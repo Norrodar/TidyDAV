@@ -16,6 +16,7 @@ import (
 
 	"github.com/Norrodar/TidyDAV/internal/app"
 	"github.com/Norrodar/TidyDAV/internal/config"
+	"github.com/Norrodar/TidyDAV/internal/scheduler"
 	"github.com/Norrodar/TidyDAV/internal/server"
 )
 
@@ -56,6 +57,21 @@ func run() error {
 	if err != nil {
 		return err
 	}
+
+	sched := scheduler.New(log)
+	sched.Add(scheduler.Job{
+		Name:     "session-cleanup",
+		Interval: time.Hour,
+		Run: func(ctx context.Context) error {
+			n, err := a.Store.DeleteExpiredSessions(ctx, time.Now())
+			if err == nil && n > 0 {
+				log.Info("purged expired sessions", "count", n)
+			}
+			return err
+		},
+	})
+	sched.Start(ctx)
+	defer sched.Stop()
 
 	httpServer := &http.Server{
 		Addr:              cfg.ListenAddr,

@@ -35,5 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Audit) backed by the session store.
 - Web UI: email+password registration page (shown when registration is enabled) and a
   post-login/post-register redirect to the feeds view.
+- In-process scheduler (`internal/scheduler`) running error-tolerant interval jobs; wired
+  to purge expired sessions hourly.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main
