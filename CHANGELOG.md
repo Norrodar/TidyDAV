@@ -37,5 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   post-login/post-register redirect to the feeds view.
 - In-process scheduler (`internal/scheduler`) running error-tolerant interval jobs; wired
   to purge expired sessions hourly.
+- Pipeline match reporting: filter and rename rules record matched event summaries,
+  exposed via `Pipeline.Matches()` — the foundation for rule-triggered notifications.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main
