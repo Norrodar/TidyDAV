@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import '$lib/styles/global.css';
   import { api } from '$lib/api';
@@ -11,6 +12,21 @@
 
   onMount(() => {
     session.refresh();
+  });
+
+  // Central auth guard: once the session is known, keep unauthenticated users out
+  // of protected routes (and non-admins out of /audit), avoiding the per-page
+  // load-then-401-redirect flash.
+  $effect(() => {
+    if (session.loading) return;
+    const path = $page.url.pathname;
+    const isProtected =
+      path.startsWith('/feeds') || path.startsWith('/sync') || path.startsWith('/audit');
+    if (isProtected && !session.authenticated) {
+      goto('/login');
+    } else if (path.startsWith('/audit') && !session.user?.isAdmin) {
+      goto('/feeds');
+    }
   });
 
   async function logout() {
