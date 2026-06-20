@@ -33,6 +33,8 @@ func (s *Server) routes(mux *http.ServeMux) error {
 	mux.HandleFunc("POST /auth/login", s.handleLogin)
 	mux.HandleFunc("POST /auth/logout", s.handleLogout)
 	mux.HandleFunc("POST /auth/secret", s.handleSecret)
+	mux.HandleFunc("POST /auth/reset/request", s.handleResetRequest)
+	mux.HandleFunc("POST /auth/reset/confirm", s.handleResetConfirm)
 	mux.HandleFunc("GET /auth/oidc/login", s.handleOIDCLogin)
 	mux.HandleFunc("GET /auth/oidc/callback", s.handleOIDCCallback)
 

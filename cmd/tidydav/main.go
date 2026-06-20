@@ -61,14 +61,18 @@ func run() error {
 
 	sched := scheduler.New(log)
 	sched.Add(scheduler.Job{
-		Name:     "session-cleanup",
+		Name:     "cleanup",
 		Interval: time.Hour,
 		Run: func(ctx context.Context) error {
-			n, err := a.Store.DeleteExpiredSessions(ctx, time.Now())
-			if err == nil && n > 0 {
+			if n, err := a.Store.DeleteExpiredSessions(ctx, time.Now()); err != nil {
+				return err
+			} else if n > 0 {
 				log.Info("purged expired sessions", "count", n)
 			}
-			return err
+			if _, err := a.Store.DeleteExpiredPasswordResets(ctx, time.Now()); err != nil {
+				return err
+			}
+			return nil
 		},
 	})
 	notif := notifier.New(a.Store, a.Feed, log)

@@ -37,6 +37,7 @@ type sessionResponse struct {
 	AccessMode          string        `json:"accessMode"`
 	OIDCEnabled         bool          `json:"oidcEnabled"`
 	RegistrationEnabled bool          `json:"registrationEnabled"`
+	MailEnabled         bool          `json:"mailEnabled"`
 }
 
 type credentialsRequest struct {
@@ -196,6 +197,7 @@ func (s *Server) sessionPayload(u *store.User) sessionResponse {
 		AccessMode:          string(s.app.Config.AccessMode),
 		OIDCEnabled:         s.app.Auth.OIDCEnabled(),
 		RegistrationEnabled: s.app.Auth.RegistrationEnabled(),
+		MailEnabled:         s.app.Auth.MailEnabled(),
 	}
 }
 
@@ -244,6 +246,45 @@ func randomToken() (string, error) {
 
 func secureCookies(cfg *config.Config) bool {
 	return strings.HasPrefix(cfg.BaseURL, "https://")
+}
+
+type resetRequestBody struct {
+	Email string `json:"email"`
+}
+
+func (s *Server) handleResetRequest(w http.ResponseWriter, r *http.Request) {
+	var req resetRequestBody
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if err := s.app.Auth.RequestPasswordReset(r.Context(), req.Email); err != nil {
+		s.app.Log.Warn("password reset request failed", "error", err)
+	}
+	// Always 204 so the response doesn't reveal whether the email exists.
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type resetConfirmBody struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
+func (s *Server) handleResetConfirm(w http.ResponseWriter, r *http.Request) {
+	var req resetConfirmBody
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	err := s.app.Auth.ConfirmPasswordReset(r.Context(), req.Token, req.Password)
+	switch {
+	case errors.Is(err, auth.ErrInvalidResetToken):
+		writeError(w, http.StatusBadRequest, "invalid or expired reset link")
+	case errors.Is(err, auth.ErrInvalidCredentials):
+		writeError(w, http.StatusBadRequest, "a new password is required")
+	case err != nil:
+		s.serverError(w, "reset confirm", err)
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 // handleICS serves a transformed feed at /ics/{secret}. It is secured by the

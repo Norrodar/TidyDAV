@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Norrodar/TidyDAV/internal/config"
+	"github.com/Norrodar/TidyDAV/internal/mail"
 	"github.com/Norrodar/TidyDAV/internal/store"
 )
 
@@ -20,6 +21,7 @@ var (
 	ErrEmailTaken         = errors.New("auth: email already registered")
 	ErrAnonymousDisabled  = errors.New("auth: anonymous access is disabled")
 	ErrOIDCNotConfigured  = errors.New("auth: oidc is not configured")
+	ErrInvalidResetToken  = errors.New("auth: invalid or expired reset token")
 )
 
 const (
@@ -29,16 +31,17 @@ const (
 
 // Service bundles authentication behavior over the store.
 type Service struct {
-	cfg   *config.Config
-	store *store.Store
-	log   *slog.Logger
-	oidc  *oidcProvider // nil when OIDC is not configured
+	cfg    *config.Config
+	store  *store.Store
+	log    *slog.Logger
+	mailer mail.Mailer
+	oidc   *oidcProvider // nil when OIDC is not configured
 }
 
 // New creates the auth service. When OIDC is configured it performs provider
 // discovery, so it requires network access and may fail at startup.
 func New(ctx context.Context, cfg *config.Config, st *store.Store, log *slog.Logger) (*Service, error) {
-	s := &Service{cfg: cfg, store: st, log: log}
+	s := &Service{cfg: cfg, store: st, log: log, mailer: mail.NewFromConfig(cfg.SMTP)}
 	if cfg.OIDC.Enabled() {
 		p, err := newOIDCProvider(ctx, cfg)
 		if err != nil {

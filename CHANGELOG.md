@@ -59,6 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web UI for DAV sync: jobs list with last-run status and a "Run now" action, plus a
   create/edit form (type, direction, conflict policy, both endpoints with credentials,
   interval, enabled). Adds a Sync nav link.
+- Password reset by email (`internal/mail`, `password_resets` table): an SMTP mailer
+  (starttls/tls/none) and `/auth/reset/request` + `/auth/reset/confirm` endpoints. Tokens
+  are hashed, expire in 1 hour and are pruned by the cleanup job; responses never reveal
+  whether an email exists. The session payload exposes `mailEnabled`.
 
 ### Fixed
 

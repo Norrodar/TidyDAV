@@ -224,3 +224,27 @@ func TestICSEndpointBasicAuth(t *testing.T) {
 		t.Fatalf("with auth status = %d, want 200 (%s)", rec2.Code, rec2.Body.String())
 	}
 }
+
+func TestPasswordResetEndpoints(t *testing.T) {
+	srv := newTestServer(t)
+
+	// Request is always 204 (no account-existence leak), even for an unknown email.
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/auth/reset/request",
+		strings.NewReader(`{"email":"nobody@example.com"}`))
+	req.Header.Set("Content-Type", "application/json")
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("reset request status = %d, want 204", rec.Code)
+	}
+
+	// Confirm with a bogus token -> 400.
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/auth/reset/confirm",
+		strings.NewReader(`{"token":"bogus","password":"newpassword"}`))
+	req2.Header.Set("Content-Type", "application/json")
+	srv.Handler().ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusBadRequest {
+		t.Errorf("reset confirm status = %d, want 400", rec2.Code)
+	}
+}
