@@ -24,6 +24,7 @@ type feedSourceDTO struct {
 }
 
 type feedRequest struct {
+	ID                string          `json:"id,omitempty"` // preview only: preserve saved source secrets
 	Name              string          `json:"name"`
 	Sources           []feedSourceDTO `json:"sources"`
 	Rules             json.RawMessage `json:"rules"`
@@ -208,6 +209,14 @@ func (s *Server) handlePreviewFeed(w http.ResponseWriter, r *http.Request) {
 		Rules:      rulesOrDefault(req.Rules),
 		TTLSeconds: normalizeTTL(req.TTLSeconds),
 	}
+	// When previewing a saved feed, reuse stored source passwords (which are
+	// write-only and not resent by the UI).
+	if req.ID != "" {
+		if existing, err := s.app.Store.FeedByID(r.Context(), req.ID); err == nil && existing.UserID == u.ID {
+			preserveSourceSecrets(f.Sources, existing)
+		}
+	}
+
 	original, transformed, err := s.app.Feed.Preview(r.Context(), f)
 	if err != nil {
 		s.app.Log.Warn("feed preview failed", "error", err)

@@ -161,7 +161,8 @@ export const api = {
     create: (input: FeedInput) => request<Feed>('/api/feeds', jsonBody('POST', input)),
     update: (id: string, input: FeedInput) => request<Feed>(`/api/feeds/${id}`, jsonBody('PUT', input)),
     remove: (id: string) => request<void>(`/api/feeds/${id}`, { method: 'DELETE' }),
-    preview: (input: FeedInput) => request<PreviewResult>('/api/feeds/preview', jsonBody('POST', input))
+    preview: (input: FeedInput, id?: string) =>
+      request<PreviewResult>('/api/feeds/preview', jsonBody('POST', id ? { ...input, id } : input))
   },
 
   audit: {

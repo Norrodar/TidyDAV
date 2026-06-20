@@ -51,5 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DNS rebind cannot bypass it.
 - The "first user becomes admin" decision is now atomic (count + insert in one
   transaction), so two concurrent first registrations cannot both become admin.
+- Previewing a saved feed reuses its stored source passwords (the editor now sends the
+  feed id), so feeds with authenticated sources no longer fail to preview after editing.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main

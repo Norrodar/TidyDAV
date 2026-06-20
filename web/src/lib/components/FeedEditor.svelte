@@ -112,7 +112,7 @@
     previewing = true;
     error = null;
     try {
-      preview = await api.feeds.preview(buildInput());
+      preview = await api.feeds.preview(buildInput(), feed?.id);
     } catch (e) {
       error = e instanceof ApiError ? e.message : 'Preview failed';
     } finally {
