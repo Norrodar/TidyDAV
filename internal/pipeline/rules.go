@@ -27,7 +27,7 @@ type FilterRule struct {
 	matcher *Matcher
 	fields  []string
 	mode    FilterMode
-	matched []string
+	matched []MatchedEvent
 }
 
 // NewFilterRule builds a filter. Empty fields default to summary/description/
@@ -57,7 +57,7 @@ func (r *FilterRule) Apply(cal *ical.Calendar) error {
 	ics.FilterEvents(cal, func(e ical.Event) bool {
 		matched := r.matches(e)
 		if matched {
-			r.matched = append(r.matched, ics.Text(e, ics.FieldSummary))
+			r.matched = append(r.matched, matchedEvent(e))
 		}
 		if r.mode == FilterWhitelist {
 			return matched
@@ -68,7 +68,7 @@ func (r *FilterRule) Apply(cal *ical.Calendar) error {
 }
 
 // Matched implements Reporter.
-func (r *FilterRule) Matched() []string { return r.matched }
+func (r *FilterRule) Matched() []MatchedEvent { return r.matched }
 
 func (r *FilterRule) matches(e ical.Event) bool {
 	for _, f := range r.fields {
@@ -144,7 +144,7 @@ type RenameRule struct {
 	re          *regexp.Regexp
 	replacement string
 	literal     bool
-	matched     []string
+	matched     []MatchedEvent
 }
 
 // NewRenameRule builds a rename rule. Target must be SUMMARY, DESCRIPTION or
@@ -199,14 +199,23 @@ func (r *RenameRule) Apply(cal *ical.Calendar) error {
 		}
 		if out != val {
 			ics.SetText(e, r.field, out)
-			r.matched = append(r.matched, out)
+			r.matched = append(r.matched, matchedEvent(e))
 		}
 	}
 	return nil
 }
 
 // Matched implements Reporter.
-func (r *RenameRule) Matched() []string { return r.matched }
+func (r *RenameRule) Matched() []MatchedEvent { return r.matched }
+
+// matchedEvent captures the identity of an event a rule matched.
+func matchedEvent(e ical.Event) MatchedEvent {
+	return MatchedEvent{
+		Summary: ics.Text(e, ics.FieldSummary),
+		UID:     ics.Text(e, "UID"),
+		Start:   ics.Raw(e, ics.FieldDTStart),
+	}
+}
 
 // ── Strip ────────────────────────────────────────────────────────────────────
 

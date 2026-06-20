@@ -37,16 +37,24 @@ func (p *Pipeline) Apply(cal *ical.Calendar) error {
 // Len returns the number of rules in the pipeline.
 func (p *Pipeline) Len() int { return len(p.rules) }
 
+// MatchedEvent identifies an event a rule matched, with enough identity to
+// de-duplicate notifications across repeated renders.
+type MatchedEvent struct {
+	Summary string
+	UID     string
+	Start   string // raw DTSTART value
+}
+
 // Reporter is implemented by rules that record which events they matched during
 // the most recent Apply (currently filter and rename).
 type Reporter interface {
-	Matched() []string
+	Matched() []MatchedEvent
 }
 
-// RuleMatch lists the event summaries a rule matched.
+// RuleMatch lists the events a rule matched.
 type RuleMatch struct {
 	Rule   string
-	Events []string
+	Events []MatchedEvent
 }
 
 // Matches returns, for each reporting rule that matched at least one event, the

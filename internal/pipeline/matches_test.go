@@ -21,14 +21,17 @@ func TestPipelineMatches(t *testing.T) {
 		t.Fatalf("Apply: %v", err)
 	}
 
-	got := map[string][]string{}
+	got := map[string][]MatchedEvent{}
 	for _, m := range p.Matches() {
 		got[m.Rule] = m.Events
 	}
-	if len(got["filter"]) != 1 || got["filter"][0] != "Spam offer" {
+	if len(got["filter"]) != 1 || got["filter"][0].Summary != "Spam offer" {
 		t.Errorf("filter matches = %v, want [Spam offer]", got["filter"])
 	}
-	if len(got["rename"]) != 1 || got["rename"][0] != "Mathe" {
+	if got["filter"][0].UID != "1" {
+		t.Errorf("filter match UID = %q, want 1 (stable identity for dedup)", got["filter"][0].UID)
+	}
+	if len(got["rename"]) != 1 || got["rename"][0].Summary != "Mathe" {
 		t.Errorf("rename matches = %v, want [Mathe]", got["rename"])
 	}
 	if _, ok := got["dedup"]; ok {
