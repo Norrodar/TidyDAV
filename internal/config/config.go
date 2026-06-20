@@ -52,6 +52,8 @@ type Config struct {
 
 	// NotifyInterval is how often the background notifier evaluates feeds.
 	NotifyInterval time.Duration
+	// SyncTick is how often the DAV sync runner checks for due jobs.
+	SyncTick time.Duration
 
 	OIDC OIDCConfig
 	SMTP SMTPConfig
@@ -100,6 +102,7 @@ func Load() (*Config, error) {
 		AllowRegistration:   envBool("TIDYDAV_ALLOW_REGISTRATION", true),
 		AllowPrivateTargets: envBool("TIDYDAV_ALLOW_PRIVATE_TARGETS", true),
 		NotifyInterval:      envDuration("TIDYDAV_NOTIFY_INTERVAL", 15*time.Minute),
+		SyncTick:            envDuration("TIDYDAV_SYNC_TICK", time.Minute),
 		OIDC: OIDCConfig{
 			IssuerURL:    strings.TrimRight(os.Getenv("TIDYDAV_OIDC_ISSUER_URL"), "/"),
 			ClientID:     os.Getenv("TIDYDAV_OIDC_CLIENT_ID"),

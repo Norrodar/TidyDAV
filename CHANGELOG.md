@@ -48,7 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bidirectional, with newest-wins / source-wins conflict resolution and a change-beats-delete
   safety rule. Tested against an in-memory fake client. Includes go-webdav-backed CalDAV and
   CardDAV collection clients (Basic Auth supported) and ICS/vCard UID/modified extractors.
-  (Job model, scheduler wiring and UI come next.)
+- DAV sync jobs (`sync_jobs` table, `internal/davsync`): per-job CalDAV/CardDAV sync between
+  two servers (uni-/bidirectional, conflict policy, per-job interval, credentials), executed
+  by a scheduled runner that persists sync state and the last-run status
+  (`TIDYDAV_SYNC_TICK`, default 1m). (API and UI come next.)
 
 ### Fixed
 

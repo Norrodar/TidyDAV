@@ -16,6 +16,7 @@ import (
 
 	"github.com/Norrodar/TidyDAV/internal/app"
 	"github.com/Norrodar/TidyDAV/internal/config"
+	"github.com/Norrodar/TidyDAV/internal/davsync"
 	"github.com/Norrodar/TidyDAV/internal/notifier"
 	"github.com/Norrodar/TidyDAV/internal/scheduler"
 	"github.com/Norrodar/TidyDAV/internal/server"
@@ -73,6 +74,8 @@ func run() error {
 	})
 	notif := notifier.New(a.Store, a.Feed, log)
 	sched.Add(scheduler.Job{Name: "notifications", Interval: cfg.NotifyInterval, Run: notif.Run})
+	syncRunner := davsync.New(a.Store, log)
+	sched.Add(scheduler.Job{Name: "dav-sync", Interval: cfg.SyncTick, Run: syncRunner.Run})
 	sched.Start(ctx)
 	defer sched.Stop()
 
