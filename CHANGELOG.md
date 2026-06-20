@@ -39,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to purge expired sessions hourly.
 - Pipeline match reporting: filter and rename rules record matched event summaries,
   exposed via `Pipeline.Matches()` — the foundation for rule-triggered notifications.
+- Rule-triggered notifications: a background notifier (`internal/notifier`, `TIDYDAV_NOTIFY_INTERVAL`,
+  default 15m) evaluates each feed's configured trigger rule types and dispatches a
+  webhook/ntfy/Gotify notification the first time each matched event is seen — never on
+  `/ics` polls, so calendar clients don't cause spam.
 
 ### Fixed
 

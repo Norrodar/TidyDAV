@@ -85,6 +85,23 @@ func (s *Service) Preview(ctx context.Context, f *store.Feed) (original, transfo
 	return original, transformed, nil
 }
 
+// Matches renders the feed (merge + pipeline) and returns the rule matches that
+// drive notifications. It does not serialize the result.
+func (s *Service) Matches(ctx context.Context, f *store.Feed) ([]pipeline.RuleMatch, error) {
+	merged, err := s.merge(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	p, err := buildPipeline(f.Rules)
+	if err != nil {
+		return nil, fmt.Errorf("feed %s: %w", f.ID, err)
+	}
+	if err := p.Apply(merged); err != nil {
+		return nil, fmt.Errorf("feed %s: %w", f.ID, err)
+	}
+	return p.Matches(), nil
+}
+
 // merge fetches every source (tolerating individual failures via the proxy's
 // stale-on-error cache) and returns one calendar with their events, de-duplicated
 // by UID.

@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // AccessMode controls who may use the instance.
@@ -48,6 +49,9 @@ type Config struct {
 	// link-local addresses. Default true (self-hosted internal calendars); set
 	// false on multi-user/public instances to mitigate SSRF.
 	AllowPrivateTargets bool
+
+	// NotifyInterval is how often the background notifier evaluates feeds.
+	NotifyInterval time.Duration
 
 	OIDC OIDCConfig
 	SMTP SMTPConfig
@@ -95,6 +99,7 @@ func Load() (*Config, error) {
 		AccessMode:          AccessMode(strings.ToLower(envDefault("TIDYDAV_ACCESS_MODE", string(AccessAuth)))),
 		AllowRegistration:   envBool("TIDYDAV_ALLOW_REGISTRATION", true),
 		AllowPrivateTargets: envBool("TIDYDAV_ALLOW_PRIVATE_TARGETS", true),
+		NotifyInterval:      envDuration("TIDYDAV_NOTIFY_INTERVAL", 15*time.Minute),
 		OIDC: OIDCConfig{
 			IssuerURL:    strings.TrimRight(os.Getenv("TIDYDAV_OIDC_ISSUER_URL"), "/"),
 			ClientID:     os.Getenv("TIDYDAV_OIDC_CLIENT_ID"),
@@ -172,6 +177,18 @@ func envInt(key string, def int) int {
 		return def
 	}
 	return n
+}
+
+func envDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return def
+	}
+	return d
 }
 
 func envFields(key string, def []string) []string {

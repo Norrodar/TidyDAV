@@ -120,6 +120,7 @@ Prefix `TIDYDAV_`. Only two are required.
 | `TIDYDAV_DB_PATH` | no | `/data/tidydav.db` | SQLite file path. |
 | `TIDYDAV_LISTEN_ADDR` | no | `:8080` | Listen address. |
 | `TIDYDAV_LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error`. |
+| `TIDYDAV_NOTIFY_INTERVAL` | no | `15m` | How often the background notifier scans feeds for rule matches (Go duration). |
 
 ### Access mode
 | Var | Req | Default | Description |

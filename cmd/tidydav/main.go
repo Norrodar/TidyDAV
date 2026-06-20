@@ -16,6 +16,7 @@ import (
 
 	"github.com/Norrodar/TidyDAV/internal/app"
 	"github.com/Norrodar/TidyDAV/internal/config"
+	"github.com/Norrodar/TidyDAV/internal/notifier"
 	"github.com/Norrodar/TidyDAV/internal/scheduler"
 	"github.com/Norrodar/TidyDAV/internal/server"
 )
@@ -70,6 +71,8 @@ func run() error {
 			return err
 		},
 	})
+	notif := notifier.New(a.Store, a.Feed, log)
+	sched.Add(scheduler.Job{Name: "notifications", Interval: cfg.NotifyInterval, Run: notif.Run})
 	sched.Start(ctx)
 	defer sched.Stop()
 

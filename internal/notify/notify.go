@@ -194,3 +194,51 @@ func NewFromConfig(cfg Config, log *slog.Logger) *Dispatcher {
 	}
 	return d
 }
+
+// FeedNotifications is the per-feed notification configuration (stored as JSON on
+// the feed). Triggers names the rule types whose matches fire notifications.
+type FeedNotifications struct {
+	WebhookURL   string   `json:"webhookUrl,omitempty"`
+	NtfyServer   string   `json:"ntfyServer,omitempty"`
+	NtfyTopic    string   `json:"ntfyTopic,omitempty"`
+	GotifyServer string   `json:"gotifyServer,omitempty"`
+	GotifyToken  string   `json:"gotifyToken,omitempty"`
+	Triggers     []string `json:"triggers,omitempty"`
+}
+
+func (f FeedNotifications) config() Config {
+	return Config{
+		WebhookURL:   f.WebhookURL,
+		NtfyServer:   f.NtfyServer,
+		NtfyTopic:    f.NtfyTopic,
+		GotifyServer: f.GotifyServer,
+		GotifyToken:  f.GotifyToken,
+	}
+}
+
+// HasTarget reports whether at least one delivery target is configured.
+func (f FeedNotifications) HasTarget() bool {
+	return f.WebhookURL != "" ||
+		(f.NtfyServer != "" && f.NtfyTopic != "") ||
+		(f.GotifyServer != "" && f.GotifyToken != "")
+}
+
+// Enabled reports whether notifications should fire (a target and a trigger).
+func (f FeedNotifications) Enabled() bool {
+	return f.HasTarget() && len(f.Triggers) > 0
+}
+
+// Triggered reports whether ruleType is configured to fire notifications.
+func (f FeedNotifications) Triggered(ruleType string) bool {
+	for _, t := range f.Triggers {
+		if t == ruleType {
+			return true
+		}
+	}
+	return false
+}
+
+// Dispatcher builds a dispatcher for this feed's configured targets.
+func (f FeedNotifications) Dispatcher(log *slog.Logger) *Dispatcher {
+	return NewFromConfig(f.config(), log)
+}
