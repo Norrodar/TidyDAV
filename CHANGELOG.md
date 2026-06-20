@@ -42,7 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rule-triggered notifications: a background notifier (`internal/notifier`, `TIDYDAV_NOTIFY_INTERVAL`,
   default 15m) evaluates each feed's configured trigger rule types and dispatches a
   webhook/ntfy/Gotify notification the first time each matched event is seen — never on
-  `/ics` polls, so calendar clients don't cause spam.
+  `/ics` polls, so calendar clients don't cause spam. Configurable per feed via the API
+  (`notifications`, Gotify token write-only) and a notifications section in the feed editor.
 
 ### Fixed
 

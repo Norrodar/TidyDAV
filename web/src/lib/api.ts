@@ -93,6 +93,24 @@ export interface RuleConfig {
   days?: number;
 }
 
+export interface NotificationsInput {
+  webhookUrl?: string;
+  ntfyServer?: string;
+  ntfyTopic?: string;
+  gotifyServer?: string;
+  gotifyToken?: string; // write-only
+  triggers?: string[];
+}
+
+export interface NotificationsResponse {
+  webhookUrl: string;
+  ntfyServer: string;
+  ntfyTopic: string;
+  gotifyServer: string;
+  gotifyTokenSet: boolean;
+  triggers: string[];
+}
+
 export interface Feed {
   id: string;
   name: string;
@@ -103,6 +121,7 @@ export interface Feed {
   ttlSeconds: number;
   basicAuthUser: string;
   basicAuthEnabled: boolean;
+  notifications: NotificationsResponse;
   createdAt: string;
   updatedAt: string;
 }
@@ -114,6 +133,7 @@ export interface FeedInput {
   ttlSeconds: number;
   basicAuthUser: string;
   basicAuthPassword?: string;
+  notifications?: NotificationsInput;
 }
 
 export interface EventSummary {

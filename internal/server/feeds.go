@@ -24,27 +24,29 @@ type feedSourceDTO struct {
 }
 
 type feedRequest struct {
-	ID                string          `json:"id,omitempty"` // preview only: preserve saved source secrets
-	Name              string          `json:"name"`
-	Sources           []feedSourceDTO `json:"sources"`
-	Rules             json.RawMessage `json:"rules"`
-	TTLSeconds        int             `json:"ttlSeconds"`
-	BasicAuthUser     string          `json:"basicAuthUser"`
-	BasicAuthPassword string          `json:"basicAuthPassword"` // write-only
+	ID                string            `json:"id,omitempty"` // preview only: preserve saved source secrets
+	Name              string            `json:"name"`
+	Sources           []feedSourceDTO   `json:"sources"`
+	Rules             json.RawMessage   `json:"rules"`
+	TTLSeconds        int               `json:"ttlSeconds"`
+	BasicAuthUser     string            `json:"basicAuthUser"`
+	BasicAuthPassword string            `json:"basicAuthPassword"` // write-only
+	Notifications     *notificationsDTO `json:"notifications,omitempty"`
 }
 
 type feedResponse struct {
-	ID               string          `json:"id"`
-	Name             string          `json:"name"`
-	Secret           string          `json:"secret"`
-	ICSURL           string          `json:"icsUrl"`
-	Sources          []feedSourceDTO `json:"sources"`
-	Rules            json.RawMessage `json:"rules"`
-	TTLSeconds       int             `json:"ttlSeconds"`
-	BasicAuthUser    string          `json:"basicAuthUser"`
-	BasicAuthEnabled bool            `json:"basicAuthEnabled"`
-	CreatedAt        string          `json:"createdAt"`
-	UpdatedAt        string          `json:"updatedAt"`
+	ID               string                `json:"id"`
+	Name             string                `json:"name"`
+	Secret           string                `json:"secret"`
+	ICSURL           string                `json:"icsUrl"`
+	Sources          []feedSourceDTO       `json:"sources"`
+	Rules            json.RawMessage       `json:"rules"`
+	TTLSeconds       int                   `json:"ttlSeconds"`
+	BasicAuthUser    string                `json:"basicAuthUser"`
+	BasicAuthEnabled bool                  `json:"basicAuthEnabled"`
+	Notifications    notificationsResponse `json:"notifications"`
+	CreatedAt        string                `json:"createdAt"`
+	UpdatedAt        string                `json:"updatedAt"`
 }
 
 type previewResponse struct {
@@ -111,6 +113,11 @@ func (s *Server) handleCreateFeed(w http.ResponseWriter, r *http.Request) {
 		BasicAuthUser: user,
 		BasicAuthHash: hash,
 	}
+	f.Notifications, err = buildNotifications(req.Notifications, nil)
+	if err != nil {
+		s.serverError(w, "notifications", err)
+		return
+	}
 	if err := s.app.Store.CreateFeed(r.Context(), f); err != nil {
 		s.serverError(w, "create feed", err)
 		return
@@ -162,6 +169,11 @@ func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 	existing.TTLSeconds = normalizeTTL(req.TTLSeconds)
 	existing.BasicAuthUser = user
 	existing.BasicAuthHash = hash
+	existing.Notifications, err = buildNotifications(req.Notifications, existing)
+	if err != nil {
+		s.serverError(w, "notifications", err)
+		return
+	}
 
 	if err := s.app.Store.UpdateFeed(r.Context(), existing); err != nil {
 		s.serverError(w, "update feed", err)
@@ -315,6 +327,7 @@ func (s *Server) toFeedResponse(f *store.Feed) feedResponse {
 		TTLSeconds:       f.TTLSeconds,
 		BasicAuthUser:    f.BasicAuthUser,
 		BasicAuthEnabled: f.BasicAuthHash != "",
+		Notifications:    toNotificationsResponse(f.Notifications),
 		CreatedAt:        f.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:        f.UpdatedAt.Format(time.RFC3339),
 	}

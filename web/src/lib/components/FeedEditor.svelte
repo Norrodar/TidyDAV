@@ -27,6 +27,13 @@
   let basicAuthUser = $state(initial?.basicAuthUser ?? '');
   let basicAuthPassword = $state('');
 
+  let notifyWebhook = $state(initial?.notifications.webhookUrl ?? '');
+  let notifyNtfyServer = $state(initial?.notifications.ntfyServer ?? '');
+  let notifyNtfyTopic = $state(initial?.notifications.ntfyTopic ?? '');
+  let notifyGotifyServer = $state(initial?.notifications.gotifyServer ?? '');
+  let notifyGotifyToken = $state('');
+  let notifyTriggers = $state<string[]>(initial?.notifications.triggers ?? []);
+
   let saving = $state(false);
   let previewing = $state(false);
   let error = $state<string | null>(null);
@@ -67,6 +74,12 @@
     rules[i] = defaultRule(type);
   }
 
+  function toggleTrigger(type: string) {
+    notifyTriggers = notifyTriggers.includes(type)
+      ? notifyTriggers.filter((t) => t !== type)
+      : [...notifyTriggers, type];
+  }
+
   function csv(arr?: string[]): string {
     return (arr ?? []).join(', ');
   }
@@ -90,7 +103,15 @@
         })),
       rules,
       basicAuthUser,
-      basicAuthPassword: basicAuthPassword || undefined
+      basicAuthPassword: basicAuthPassword || undefined,
+      notifications: {
+        webhookUrl: notifyWebhook || undefined,
+        ntfyServer: notifyNtfyServer || undefined,
+        ntfyTopic: notifyNtfyTopic || undefined,
+        gotifyServer: notifyGotifyServer || undefined,
+        gotifyToken: notifyGotifyToken || undefined,
+        triggers: notifyTriggers
+      }
     };
   }
 
@@ -262,6 +283,60 @@
     </div>
   </section>
 
+  <section class="card">
+    <h2>Notifications</h2>
+    <p class="muted">
+      Fire a notification when matching rules trigger. Checked on a schedule (not on every
+      calendar refresh), and each matched event notifies only once.
+    </p>
+    <div class="triggers">
+      <span>Trigger on:</span>
+      <label>
+        <input
+          type="checkbox"
+          checked={notifyTriggers.includes('filter')}
+          onchange={() => toggleTrigger('filter')}
+        /> filter
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={notifyTriggers.includes('rename')}
+          onchange={() => toggleTrigger('rename')}
+        /> rename
+      </label>
+    </div>
+    <label class="field">
+      <span>Webhook URL</span>
+      <input class="input" bind:value={notifyWebhook} placeholder="https://… (HTTP POST JSON)" />
+    </label>
+    <div class="row">
+      <label class="field grow">
+        <span>ntfy server</span>
+        <input class="input" bind:value={notifyNtfyServer} placeholder="https://ntfy.sh" />
+      </label>
+      <label class="field grow">
+        <span>ntfy topic</span>
+        <input class="input" bind:value={notifyNtfyTopic} />
+      </label>
+    </div>
+    <div class="row">
+      <label class="field grow">
+        <span>Gotify server</span>
+        <input class="input" bind:value={notifyGotifyServer} placeholder="https://gotify.example.com" />
+      </label>
+      <label class="field grow">
+        <span>Gotify token</span>
+        <input
+          class="input"
+          type="password"
+          bind:value={notifyGotifyToken}
+          placeholder={initial?.notifications.gotifyTokenSet ? 'unchanged' : ''}
+        />
+      </label>
+    </div>
+  </section>
+
   {#if error}<p class="error">{error}</p>{/if}
 
   <div class="actions">
@@ -395,6 +470,18 @@
     color: var(--text-tertiary);
     font-size: var(--text-sm);
     margin: 0;
+  }
+  .triggers {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+  .triggers label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
   .error {
     color: var(--danger);

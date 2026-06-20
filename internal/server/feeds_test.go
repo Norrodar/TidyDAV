@@ -193,3 +193,44 @@ func TestFeedActionsAreAudited(t *testing.T) {
 		t.Errorf("audit missing create entry: %s", rec.Body.String())
 	}
 }
+
+func TestFeedNotifications(t *testing.T) {
+	srv := newTestServer(t)
+	cookies := register(t, srv, "n@example.com")
+
+	body := `{"name":"N","sources":[],"notifications":{"gotifyServer":"https://g","gotifyToken":"supersecret","triggers":["filter"]}}`
+	rec := do(t, srv, http.MethodPost, "/api/feeds", body, cookies)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "supersecret") {
+		t.Errorf("gotify token leaked in response: %s", rec.Body.String())
+	}
+	var created struct {
+		ID            string `json:"id"`
+		Notifications struct {
+			GotifyServer   string   `json:"gotifyServer"`
+			GotifyTokenSet bool     `json:"gotifyTokenSet"`
+			Triggers       []string `json:"triggers"`
+		} `json:"notifications"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created.Notifications.GotifyServer != "https://g" || !created.Notifications.GotifyTokenSet {
+		t.Fatalf("notifications not stored: %s", rec.Body.String())
+	}
+	if len(created.Notifications.Triggers) != 1 || created.Notifications.Triggers[0] != "filter" {
+		t.Errorf("triggers = %v", created.Notifications.Triggers)
+	}
+
+	// Updating without resending the token must preserve it.
+	upd := `{"name":"N","sources":[],"notifications":{"gotifyServer":"https://g","triggers":["filter","rename"]}}`
+	rec = do(t, srv, http.MethodPut, "/api/feeds/"+created.ID, upd, cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"gotifyTokenSet":true`) {
+		t.Errorf("token not preserved on update: %s", rec.Body.String())
+	}
+}
