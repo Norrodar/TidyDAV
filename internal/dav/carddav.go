@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/emersion/go-vcard"
-	"github.com/emersion/go-webdav"
 	"github.com/emersion/go-webdav/carddav"
 )
 
@@ -24,11 +22,7 @@ type CardDAVCollection struct {
 // NewCardDAVCollection connects to the CardDAV address book at endpoint,
 // optionally authenticating with HTTP Basic Auth.
 func NewCardDAVCollection(endpoint, username, password string) (*CardDAVCollection, error) {
-	var httpClient webdav.HTTPClient = http.DefaultClient
-	if username != "" {
-		httpClient = webdav.HTTPClientWithBasicAuth(http.DefaultClient, username, password)
-	}
-	client, err := carddav.NewClient(httpClient, endpoint)
+	client, err := carddav.NewClient(davHTTPClient(username, password), endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("dav: carddav client: %w", err)
 	}

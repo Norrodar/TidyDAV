@@ -51,7 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DAV sync jobs (`sync_jobs` table, `internal/davsync`): per-job CalDAV/CardDAV sync between
   two servers (uni-/bidirectional, conflict policy, per-job interval, credentials), executed
   by a scheduled runner that persists sync state and the last-run status
-  (`TIDYDAV_SYNC_TICK`, default 1m). (API and UI come next.)
+  (`TIDYDAV_SYNC_TICK`, default 1m).
+- Sync jobs API (`/api/sync`, session-authenticated): list/create/get/update/delete plus a
+  manual `POST /api/sync/{id}/run`. Passwords are write-only (preserved across updates,
+  masked in responses). DAV clients use a request timeout so a hung server can't stall the
+  runner. (UI comes next.)
 
 ### Fixed
 

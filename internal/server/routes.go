@@ -21,6 +21,13 @@ func (s *Server) routes(mux *http.ServeMux) error {
 	mux.HandleFunc("DELETE /api/feeds/{id}", s.handleDeleteFeed)
 	mux.HandleFunc("GET /api/audit", s.handleListAudit)
 
+	mux.HandleFunc("GET /api/sync", s.handleListSyncJobs)
+	mux.HandleFunc("POST /api/sync", s.handleCreateSyncJob)
+	mux.HandleFunc("POST /api/sync/{id}/run", s.handleRunSyncJob)
+	mux.HandleFunc("GET /api/sync/{id}", s.handleGetSyncJob)
+	mux.HandleFunc("PUT /api/sync/{id}", s.handleUpdateSyncJob)
+	mux.HandleFunc("DELETE /api/sync/{id}", s.handleDeleteSyncJob)
+
 	// Authentication.
 	mux.HandleFunc("POST /auth/register", s.handleRegister)
 	mux.HandleFunc("POST /auth/login", s.handleLogin)

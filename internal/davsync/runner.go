@@ -50,6 +50,12 @@ func due(job *store.SyncJob, now time.Time) bool {
 	return now.Sub(job.LastRunAt) >= interval
 }
 
+// RunOne executes a single job immediately, ignoring its interval. Used by the
+// manual-run API.
+func (r *Runner) RunOne(ctx context.Context, job *store.SyncJob) {
+	r.runJob(ctx, job)
+}
+
 func (r *Runner) runJob(ctx context.Context, job *store.SyncJob) {
 	a, b, opts, err := buildSync(job)
 	if err != nil {

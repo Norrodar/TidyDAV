@@ -7,11 +7,22 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Norrodar/TidyDAV/internal/ics"
 	"github.com/emersion/go-webdav"
 	"github.com/emersion/go-webdav/caldav"
 )
+
+// davHTTPClient builds an HTTP client with a timeout (so a hung server cannot
+// block the sync runner), optionally adding HTTP Basic Auth.
+func davHTTPClient(username, password string) webdav.HTTPClient {
+	base := &http.Client{Timeout: 60 * time.Second}
+	if username != "" {
+		return webdav.HTTPClientWithBasicAuth(base, username, password)
+	}
+	return base
+}
 
 var _ Collection = (*CalDAVCollection)(nil)
 
@@ -24,11 +35,7 @@ type CalDAVCollection struct {
 // NewCalDAVCollection connects to the CalDAV calendar at endpoint (the calendar
 // collection URL), optionally authenticating with HTTP Basic Auth.
 func NewCalDAVCollection(endpoint, username, password string) (*CalDAVCollection, error) {
-	var httpClient webdav.HTTPClient = http.DefaultClient
-	if username != "" {
-		httpClient = webdav.HTTPClientWithBasicAuth(http.DefaultClient, username, password)
-	}
-	client, err := caldav.NewClient(httpClient, endpoint)
+	client, err := caldav.NewClient(davHTTPClient(username, password), endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("dav: caldav client: %w", err)
 	}

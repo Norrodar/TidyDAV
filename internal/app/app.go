@@ -10,6 +10,7 @@ import (
 	"github.com/Norrodar/TidyDAV/internal/audit"
 	"github.com/Norrodar/TidyDAV/internal/auth"
 	"github.com/Norrodar/TidyDAV/internal/config"
+	"github.com/Norrodar/TidyDAV/internal/davsync"
 	"github.com/Norrodar/TidyDAV/internal/feed"
 	"github.com/Norrodar/TidyDAV/internal/proxy"
 	"github.com/Norrodar/TidyDAV/internal/store"
@@ -24,6 +25,7 @@ type App struct {
 	Auth    *auth.Service
 	Feed    *feed.Service
 	Audit   *audit.Logger
+	Sync    *davsync.Runner
 	Version string
 }
 
@@ -52,6 +54,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, version stri
 		Auth:    authSvc,
 		Feed:    feedSvc,
 		Audit:   audit.New(st, log),
+		Sync:    davsync.New(st, log),
 		Version: version,
 	}, nil
 }
