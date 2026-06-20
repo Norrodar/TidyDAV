@@ -49,5 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional SSRF hardening for the feed proxy: `TIDYDAV_ALLOW_PRIVATE_TARGETS=false`
   refuses fetches to loopback/private/link-local addresses, validated at dial time so a
   DNS rebind cannot bypass it.
+- The "first user becomes admin" decision is now atomic (count + insert in one
+  transaction), so two concurrent first registrations cannot both become admin.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main
