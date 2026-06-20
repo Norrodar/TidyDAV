@@ -1,0 +1,32 @@
+# Go
+/tidydav
+/tidydav.exe
+*.test
+*.out
+coverage.*
+
+# Node / SvelteKit
+web/node_modules/
+web/.svelte-kit/
+web/build/
+web/.env
+
+# Embedded frontend build output (regenerated; keep the placeholder only)
+internal/ui/dist/*
+!internal/ui/dist/.gitkeep
+!internal/ui/dist/index.html
+
+# Runtime data
+*.db
+*.db-shm
+*.db-wal
+/data/
+
+# Secrets / local env
+.env
+deploy/.env
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.log

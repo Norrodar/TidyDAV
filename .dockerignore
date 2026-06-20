@@ -1,0 +1,22 @@
+.git
+.github
+.vscode
+*.md
+!README.md
+
+# Frontend deps / build caches (the image rebuilds these)
+web/node_modules
+web/.svelte-kit
+web/build
+
+# Runtime data and secrets
+*.db
+*.db-shm
+*.db-wal
+data/
+.env
+deploy/.env
+*.log
+
+# Plans / local tooling
+.golangci.yml

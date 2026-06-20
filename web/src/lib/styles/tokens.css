@@ -1,0 +1,68 @@
+/* TidyDAV design tokens — dark mode only (v1). Apple-leaning: one accent,
+   monochromatic base, semantic colors for status only. See CLAUDE.md. */
+:root {
+  /* Surfaces — layered near-black for depth */
+  --bg-base: #0a0a0c;
+  --bg-elevated: #161618;
+  --bg-overlay: rgba(28, 28, 32, 0.72); /* blur layers */
+  --separator: rgba(255, 255, 255, 0.1);
+
+  /* Text — opacity ramp on white */
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.58);
+  --text-tertiary: rgba(255, 255, 255, 0.36);
+
+  /* Accent (single) */
+  --accent: #0a84ff;
+  --accent-hover: #3a9bff;
+  --accent-text: #ffffff;
+
+  /* Semantic — status only */
+  --success: #30d158;
+  --warning: #ff9f0a;
+  --danger: #ff453a;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Spacing (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Type scale (1rem = 16px base) */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Depth */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --blur: 20px;
+
+  /* Focus ring */
+  --focus-ring: 0 0 0 3px rgba(10, 132, 255, 0.45);
+
+  /* Motion */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
+  --dur-slow: 300ms;
+}
