@@ -40,4 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pipeline match reporting: filter and rename rules record matched event summaries,
   exposed via `Pipeline.Matches()` — the foundation for rule-triggered notifications.
 
+### Fixed
+
+- Notifications no longer log the Gotify token (query string) or userinfo password on
+  delivery failure — the URL is redacted in error messages.
+- Rename rules now reject an empty pattern, which previously inserted the replacement
+  between every character of a field.
+
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main

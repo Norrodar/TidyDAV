@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -129,5 +130,20 @@ func TestNewFromConfig(t *testing.T) {
 	}
 	if NewFromConfig(Config{NtfyServer: "https://ntfy.sh"}, testLogger()).Len() != 0 {
 		t.Error("ntfy without topic should not register")
+	}
+}
+
+func TestErrorDoesNotLeakToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	err := NewGotifyNotifier(srv.URL, "supersecret").Notify(context.Background(), sampleEvent)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if strings.Contains(err.Error(), "supersecret") {
+		t.Errorf("error leaked the gotify token: %v", err)
 	}
 }

@@ -121,6 +121,12 @@ func TestRenameInvalidTarget(t *testing.T) {
 	}
 }
 
+func TestRenameEmptyPattern(t *testing.T) {
+	if _, err := NewRenameRule(ics.FieldSummary, MatchSubstring, "  ", "x"); err == nil {
+		t.Fatal("expected error for empty rename pattern")
+	}
+}
+
 func TestStrip(t *testing.T) {
 	cal := mustCal(t, event("1",
 		"SUMMARY:Private",

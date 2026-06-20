@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -47,9 +48,20 @@ func post(ctx context.Context, client *http.Client, url, contentType string, bod
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("notify: %s returned status %d", url, resp.StatusCode)
+		return fmt.Errorf("notify: %s returned status %d", redactURL(url), resp.StatusCode)
 	}
 	return nil
+}
+
+// redactURL strips the query string (e.g. a Gotify ?token=) and masks any
+// userinfo password so credentials never reach logs.
+func redactURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "[redacted]"
+	}
+	u.RawQuery = ""
+	return u.Redacted()
 }
 
 func title(ev Event) string {

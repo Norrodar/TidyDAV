@@ -156,6 +156,9 @@ func NewRenameRule(field string, matchMode MatchMode, pattern, replacement strin
 	default:
 		return nil, fmt.Errorf("pipeline: rename target %q is not an editable text field", field)
 	}
+	if strings.TrimSpace(pattern) == "" {
+		return nil, fmt.Errorf("pipeline: rename pattern must not be empty")
+	}
 
 	var (
 		re      *regexp.Regexp
