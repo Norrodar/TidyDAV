@@ -44,6 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   webhook/ntfy/Gotify notification the first time each matched event is seen — never on
   `/ics` polls, so calendar clients don't cause spam. Configurable per feed via the API
   (`notifications`, Gotify token write-only) and a notifications section in the feed editor.
+- DAV sync engine (`internal/dav`): UID-matched CalDAV/CardDAV reconciliation — uni- and
+  bidirectional, with newest-wins / source-wins conflict resolution and a change-beats-delete
+  safety rule. Tested against an in-memory fake client. (Real go-webdav client and job
+  wiring come next.)
 
 ### Fixed
 

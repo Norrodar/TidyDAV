@@ -6,7 +6,10 @@
 // body), since hrefs and ETags are server-specific.
 package dav
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // ItemMeta is the cheap listing info for a DAV resource.
 type ItemMeta struct {
@@ -71,6 +74,9 @@ type Options struct {
 	Conflict  Conflict
 	// UID extracts the stable cross-server identity from an item body.
 	UID func([]byte) string
+	// Modified extracts the last-modified time from an item body, used by the
+	// newest-wins conflict policy. When nil, conflicts fall back to source-wins.
+	Modified func([]byte) time.Time
 }
 
 // Result counts what a sync run changed on the destination side(s).

@@ -21,7 +21,7 @@ func Sync(ctx context.Context, a, b Collection, state *State, opts Options) (Res
 	case BToA:
 		return syncOneWay(ctx, b, a, state, opts.UID)
 	case Bidirectional:
-		return Result{}, fmt.Errorf("dav: bidirectional sync not yet implemented")
+		return syncBidirectional(ctx, a, b, state, opts)
 	default:
 		return Result{}, fmt.Errorf("dav: unknown direction %q", opts.Direction)
 	}

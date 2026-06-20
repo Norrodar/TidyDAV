@@ -141,9 +141,6 @@ func TestSyncErrors(t *testing.T) {
 	if _, err := Sync(ctx, newFake(), newFake(), NewState(), Options{Direction: AToB}); err == nil {
 		t.Error("expected error when UID func is nil")
 	}
-	if _, err := Sync(ctx, newFake(), newFake(), NewState(), Options{Direction: Bidirectional, UID: uid}); err == nil {
-		t.Error("expected error for unimplemented bidirectional")
-	}
 	if _, err := Sync(ctx, newFake(), newFake(), NewState(), Options{Direction: "nope", UID: uid}); err == nil {
 		t.Error("expected error for unknown direction")
 	}
