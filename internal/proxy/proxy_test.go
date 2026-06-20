@@ -51,7 +51,7 @@ func TestFetchFreshCacheSkipsUpstream(t *testing.T) {
 		t.Fatalf("Fetch: %v", err)
 	}
 	if string(body) != "CACHED" || src != SourceCacheFresh {
-		t.Errorf("got (%q, %s), want (CACHED, cache-fresh)", body, src)
+		t.Errorf("got (%q, %v), want (CACHED, SourceCacheFresh)", body, src)
 	}
 	if atomic.LoadInt32(&hits) != 0 {
 		t.Errorf("upstream hit %d times, want 0", hits)
@@ -71,7 +71,7 @@ func TestFetchUpstreamPopulatesCache(t *testing.T) {
 		t.Fatalf("Fetch: %v", err)
 	}
 	if string(body) != "UPSTREAM" || src != SourceUpstream {
-		t.Errorf("got (%q, %s), want (UPSTREAM, upstream)", body, src)
+		t.Errorf("got (%q, %v), want (UPSTREAM, SourceUpstream)", body, src)
 	}
 	if cached := cache.m[srv.URL]; cached == nil || string(cached.Body) != "UPSTREAM" || cached.ETag != "v1" {
 		t.Errorf("cache not populated correctly: %+v", cached)
@@ -94,7 +94,7 @@ func TestFetchStaleOnError(t *testing.T) {
 		t.Fatalf("Fetch: %v", err)
 	}
 	if string(body) != "STALE" || src != SourceCacheStale {
-		t.Errorf("got (%q, %s), want (STALE, cache-stale)", body, src)
+		t.Errorf("got (%q, %v), want (STALE, SourceCacheStale)", body, src)
 	}
 }
 
@@ -130,7 +130,7 @@ func TestFetch304ReusesBody(t *testing.T) {
 		t.Fatalf("Fetch: %v", err)
 	}
 	if string(body) != "OLD" || src != SourceUpstream {
-		t.Errorf("got (%q, %s), want (OLD, upstream via 304)", body, src)
+		t.Errorf("got (%q, %v), want (OLD, SourceUpstream via 304)", body, src)
 	}
 }
 

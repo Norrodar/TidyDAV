@@ -34,19 +34,6 @@ const (
 	SourceCacheStale
 )
 
-func (s Source) String() string {
-	switch s {
-	case SourceUpstream:
-		return "upstream"
-	case SourceCacheFresh:
-		return "cache-fresh"
-	case SourceCacheStale:
-		return "cache-stale"
-	default:
-		return "none"
-	}
-}
-
 // Fetcher retrieves upstream feeds with caching.
 type Fetcher struct {
 	client *http.Client

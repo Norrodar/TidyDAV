@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
-	"strings"
 
 	"github.com/Norrodar/TidyDAV/internal/store"
 )
@@ -55,13 +54,4 @@ func (s *Service) CreateSecretUser(ctx context.Context) (user *store.User, secre
 		return nil, "", err
 	}
 	return u, secret, nil
-}
-
-// UserBySecret resolves a plaintext secret-id to its user.
-func (s *Service) UserBySecret(ctx context.Context, secret string) (*store.User, error) {
-	secret = strings.TrimSpace(secret)
-	if secret == "" {
-		return nil, store.ErrNotFound
-	}
-	return s.store.UserBySecretHash(ctx, hashSecret(secret))
 }

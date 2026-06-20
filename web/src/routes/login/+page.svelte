@@ -51,9 +51,11 @@
       </button>
     </form>
 
-    <div class="divider"><span>or</span></div>
+    {#if session.oidcEnabled}
+      <div class="divider"><span>or</span></div>
 
-    <a class="button button-secondary" href="/auth/oidc/login">Continue with SSO</a>
+      <a class="button button-secondary" href="/auth/oidc/login">Continue with SSO</a>
+    {/if}
 
     {#if session.registrationEnabled}
       <p class="hint">No account? <a href="/register">Create one</a></p>

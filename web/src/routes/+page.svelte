@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api, type HealthResponse } from '$lib/api';
+  import { session } from '$lib/state/session.svelte';
 
   let status = $state<'checking' | 'ok' | 'error'>('checking');
   let health = $state<HealthResponse | null>(null);
@@ -31,8 +32,16 @@
       <span class="badge badge-error">unreachable</span>
     {/if}
   </div>
-  <p class="hint">This is an early scaffold. Feed and sync management lands soon.</p>
-  <a class="button" href="/login">Sign in</a>
+  {#if session.authenticated}
+    <p class="hint">Manage your transformed calendars and DAV sync jobs.</p>
+    <div class="actions">
+      <a class="button" href="/feeds">Feeds</a>
+      <a class="button button-secondary" href="/sync">DAV sync</a>
+    </div>
+  {:else}
+    <p class="hint">Sign in to manage your feeds and sync jobs.</p>
+    <a class="button" href="/login">Sign in</a>
+  {/if}
 </div>
 
 <style>
@@ -61,5 +70,10 @@
     margin: 0 0 var(--space-5);
     color: var(--text-tertiary);
     font-size: var(--text-sm);
+  }
+
+  .actions {
+    display: flex;
+    gap: var(--space-3);
   }
 </style>

@@ -84,13 +84,15 @@
           <option value="bidirectional">Bidirectional</option>
         </select>
       </label>
-      <label class="field grow">
-        <span>Conflict (bidirectional)</span>
-        <select class="input" bind:value={conflict}>
-          <option value="newest-wins">Newest wins</option>
-          <option value="source-wins">A (source) wins</option>
-        </select>
-      </label>
+      {#if direction === 'bidirectional'}
+        <label class="field grow">
+          <span>Conflict (bidirectional)</span>
+          <select class="input" bind:value={conflict}>
+            <option value="newest-wins">Newest wins</option>
+            <option value="source-wins">Server A wins</option>
+          </select>
+        </label>
+      {/if}
     </div>
   </section>
 
@@ -104,11 +106,11 @@
       <div class="row">
         <label class="field grow">
           <span>Username</span>
-          <input class="input" bind:value={aUsername} />
+          <input class="input" bind:value={aUsername} autocomplete="off" />
         </label>
         <label class="field grow">
           <span>Password</span>
-          <input class="input" type="password" bind:value={aPassword} placeholder={initial?.aPasswordSet ? 'unchanged' : ''} />
+          <input class="input" type="password" bind:value={aPassword} autocomplete="new-password" placeholder={initial?.aPasswordSet ? 'unchanged' : ''} />
         </label>
       </div>
     </section>
@@ -122,11 +124,11 @@
       <div class="row">
         <label class="field grow">
           <span>Username</span>
-          <input class="input" bind:value={bUsername} />
+          <input class="input" bind:value={bUsername} autocomplete="off" />
         </label>
         <label class="field grow">
           <span>Password</span>
-          <input class="input" type="password" bind:value={bPassword} placeholder={initial?.bPasswordSet ? 'unchanged' : ''} />
+          <input class="input" type="password" bind:value={bPassword} autocomplete="new-password" placeholder={initial?.bPasswordSet ? 'unchanged' : ''} />
         </label>
       </div>
     </section>

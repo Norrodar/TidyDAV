@@ -38,6 +38,18 @@
     }
   }
 
+  function formatLastRun(iso: string): string {
+    if (!iso) return 'never';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? iso : d.toLocaleString();
+  }
+
+  function statusClass(status: string): string {
+    if (status.startsWith('ok')) return 'badge badge-ok';
+    if (status.startsWith('error') || status.startsWith('config')) return 'badge badge-error';
+    return 'badge';
+  }
+
   async function remove(job: SyncJob) {
     if (!confirm(`Delete sync job “${job.name}”?`)) return;
     try {
@@ -74,7 +86,10 @@
             <span class="badge">{job.direction}</span>
             <span class="badge">{Math.round(job.intervalSeconds / 60)}m</span>
           </div>
-          {#if job.lastStatus}<code class="status">{job.lastStatus}</code>{/if}
+          <div class="run">
+            <span class="last-run">Last run: {formatLastRun(job.lastRunAt)}</span>
+            {#if job.lastStatus}<span class={statusClass(job.lastStatus)}>{job.lastStatus}</span>{/if}
+          </div>
         </div>
         <div class="row-actions">
           <button class="button button-secondary" onclick={() => run(job)} disabled={running === job.id}>
@@ -126,10 +141,15 @@
     display: flex;
     gap: var(--space-2);
   }
-  .status {
+  .run {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .last-run {
     color: var(--text-tertiary);
     font-size: var(--text-xs);
-    word-break: break-all;
   }
   .row-actions {
     display: flex;

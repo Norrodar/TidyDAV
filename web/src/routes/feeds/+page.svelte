@@ -37,12 +37,16 @@
   }
 
   async function copy(url: string) {
+    if (!navigator.clipboard?.writeText) {
+      error = 'Copy failed — select the URL manually.';
+      return;
+    }
     try {
       await navigator.clipboard.writeText(url);
       copied = url;
       setTimeout(() => (copied = null), 1500);
     } catch {
-      /* clipboard unavailable */
+      error = 'Copy failed — select the URL manually.';
     }
   }
 </script>
@@ -68,6 +72,9 @@
         <div class="info">
           <h2>{feed.name}</h2>
           <code class="url">{feed.icsUrl}</code>
+          {#if feed.basicAuthEnabled}
+            <p class="auth-hint">Requires HTTP Basic Auth in your calendar client.</p>
+          {/if}
         </div>
         <div class="meta">
           <span class="badge">{feed.sources.length} source{feed.sources.length === 1 ? '' : 's'}</span>
@@ -118,6 +125,11 @@
     color: var(--text-tertiary);
     font-size: var(--text-xs);
     word-break: break-all;
+  }
+  .auth-hint {
+    margin: var(--space-1) 0 0;
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
   }
   .meta {
     display: flex;

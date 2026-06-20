@@ -209,6 +209,10 @@ func jobFromRequest(id, userID string, req *syncJobRequest, existing *store.Sync
 }
 
 func toSyncJobResponse(j *store.SyncJob) syncJobResponse {
+	lastRunAt := ""
+	if !j.LastRunAt.IsZero() {
+		lastRunAt = j.LastRunAt.UTC().Format(time.RFC3339)
+	}
 	return syncJobResponse{
 		ID:              j.ID,
 		Name:            j.Name,
@@ -223,18 +227,11 @@ func toSyncJobResponse(j *store.SyncJob) syncJobResponse {
 		BPasswordSet:    j.BPassword != "",
 		IntervalSeconds: j.IntervalSeconds,
 		Enabled:         j.Enabled,
-		LastRunAt:       formatTimeRFC(j.LastRunAt),
+		LastRunAt:       lastRunAt,
 		LastStatus:      j.LastStatus,
 		CreatedAt:       j.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:       j.UpdatedAt.Format(time.RFC3339),
 	}
-}
-
-func formatTimeRFC(t time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-	return t.UTC().Format(time.RFC3339)
 }
 
 func validateSyncJobRequest(w http.ResponseWriter, req *syncJobRequest) bool {

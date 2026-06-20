@@ -54,11 +54,6 @@ func (s *Store) UserByOIDCSubject(ctx context.Context, subject string) (*User, e
 	return s.userBy(ctx, "oidc_subject", subject)
 }
 
-// UserBySecretHash returns the user with the given secret hash, or ErrNotFound.
-func (s *Store) UserBySecretHash(ctx context.Context, secretHash string) (*User, error) {
-	return s.userBy(ctx, "secret_hash", secretHash)
-}
-
 // userBy looks up a single user by an internal (non-user-supplied) column name.
 func (s *Store) userBy(ctx context.Context, column, value string) (*User, error) {
 	row := s.db.QueryRowContext(ctx, "SELECT "+userColumns+" FROM users WHERE "+column+" = ?", value)

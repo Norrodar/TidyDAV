@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/emersion/go-ical"
 )
@@ -18,8 +17,6 @@ const (
 	FieldDescription = "DESCRIPTION"
 	FieldLocation    = "LOCATION"
 	FieldCategories  = "CATEGORIES"
-	FieldURL         = "URL"
-	FieldAttendee    = "ATTENDEE"
 	FieldDTStart     = "DTSTART"
 	FieldDTEnd       = "DTEND"
 )
@@ -71,17 +68,6 @@ func SetText(e ical.Event, field, value string) {
 // Remove deletes a field (all its values) from the event.
 func Remove(e ical.Event, field string) {
 	e.Props.Del(strings.ToUpper(field))
-}
-
-// Start returns the event start time, interpreting floating values in loc.
-func Start(e ical.Event, loc *time.Location) (time.Time, error) {
-	return e.DateTimeStart(loc)
-}
-
-// End returns the event end time (falling back to start+duration), interpreting
-// floating values in loc.
-func End(e ical.Event, loc *time.Location) (time.Time, error) {
-	return e.DateTimeEnd(loc)
 }
 
 // FilterEvents rebuilds the calendar in place, keeping every non-event child and

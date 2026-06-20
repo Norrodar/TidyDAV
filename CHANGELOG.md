@@ -79,5 +79,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transaction), so two concurrent first registrations cannot both become admin.
 - Previewing a saved feed reuses its stored source passwords (the editor now sends the
   feed id), so feeds with authenticated sources no longer fail to preview after editing.
+- The "Continue with SSO" button on the sign-in page is now shown only when OIDC is
+  enabled (`oidcEnabled`), instead of always linking to an unconfigured login route.
+- The home page now branches on authentication: signed-in users get links into the Feeds
+  and Sync views instead of the placeholder "early scaffold" card and a sign-in button.
+- The sync job editor only shows the conflict-resolution field for bidirectional jobs,
+  where it actually applies.
+- Native form controls (`<select>`, date pickers) now render in dark mode via
+  `color-scheme: dark`.
+- Credential fields (DAV usernames/passwords, basic-auth password, source passwords and
+  the Gotify token) set `autocomplete` hints so browsers don't autofill stored logins.
+- Copying an ICS URL now surfaces a "select the URL manually" message when the clipboard
+  API is unavailable or fails, instead of silently doing nothing.
+- The sync jobs list now surfaces each job's last-run time and a colored status badge.
+- The feeds list shows a hint when a feed requires HTTP Basic Auth in the calendar client.
+- Removed dead code: the unused user-level secret-id lookup (`UserBySecret` /
+  `UserBySecretHash`) and unused `internal/ics` (`FieldURL`, `FieldAttendee`, `Start`,
+  `End`) and `internal/proxy` (`Source.String`) symbols.
+
+### Known limitations
+
+- VTODO/tasks are not a first-class sync kind — CalDAV jobs still carry VTODOs in the collection.
+- No CTag/sync-token fast-path — each run does a full PROPFIND.
+- Cross-source merge-dedup is UID-only — use a dedup rule for content-level deduplication.
+- Sync jobs don't share credentials — each job stores its own.
+- Only filter and rename rules can trigger notifications.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main

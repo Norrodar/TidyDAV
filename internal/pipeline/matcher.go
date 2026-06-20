@@ -12,7 +12,7 @@ import (
 type MatchMode string
 
 const (
-	// MatchSubstring is the "DAU" mode: case-insensitive substring match.
+	// MatchSubstring does a case-insensitive substring match.
 	MatchSubstring MatchMode = "substring"
 	// MatchRegex uses full Go regular-expression syntax.
 	MatchRegex MatchMode = "regex"

@@ -163,6 +163,7 @@
           class="input"
           type="password"
           bind:value={source.password}
+          autocomplete="new-password"
           placeholder="password (optional)"
         />
         <button type="button" class="icon" onclick={() => removeSource(i)} aria-label="Remove">×</button>
@@ -277,6 +278,7 @@
           class="input"
           type="password"
           bind:value={basicAuthPassword}
+          autocomplete="new-password"
           placeholder={feed?.basicAuthEnabled ? 'unchanged' : ''}
         />
       </label>
@@ -331,6 +333,7 @@
           class="input"
           type="password"
           bind:value={notifyGotifyToken}
+          autocomplete="new-password"
           placeholder={initial?.notifications.gotifyTokenSet ? 'unchanged' : ''}
         />
       </label>
