@@ -126,6 +126,7 @@ Prefix `TIDYDAV_`. Only two are required.
 |---|---|---|---|
 | `TIDYDAV_ACCESS_MODE` | no | `auth` | `public` (everyone gets a secret-id), `auth` (OIDC / email+pw only), `both`. |
 | `TIDYDAV_ALLOW_REGISTRATION` | no | `true` | Allow email+password self-registration (only relevant when auth is enabled). |
+| `TIDYDAV_ALLOW_PRIVATE_TARGETS` | no | `true` | Allow the feed proxy to reach loopback/private/link-local hosts. Set `false` on multi-user/public instances (SSRF mitigation). |
 
 ### OIDC (optional — enabled when issuer + client id are set)
 | Var | Req | Default | Description |

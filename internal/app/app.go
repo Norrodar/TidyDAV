@@ -43,7 +43,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, version stri
 		return nil, fmt.Errorf("init auth: %w", err)
 	}
 
-	feedSvc := feed.NewService(proxy.NewFetcher(st, log), log)
+	feedSvc := feed.NewService(proxy.NewFetcher(st, log, cfg.AllowPrivateTargets), log)
 
 	return &App{
 		Config:  cfg,

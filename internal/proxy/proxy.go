@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -54,14 +55,52 @@ type Fetcher struct {
 	now    func() time.Time
 }
 
-// NewFetcher creates a Fetcher backed by cache.
-func NewFetcher(cache Cache, log *slog.Logger) *Fetcher {
+// NewFetcher creates a Fetcher backed by cache. When allowPrivate is false the
+// HTTP client refuses to connect to loopback, private and link-local addresses
+// (SSRF hardening for multi-user / public instances); self-hosted instances that
+// proxy calendars on a private network should leave it true.
+func NewFetcher(cache Cache, log *slog.Logger, allowPrivate bool) *Fetcher {
 	return &Fetcher{
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: buildClient(allowPrivate),
 		cache:  cache,
 		log:    log,
 		now:    time.Now,
 	}
+}
+
+func buildClient(allowPrivate bool) *http.Client {
+	if allowPrivate {
+		return &http.Client{Timeout: 30 * time.Second}
+	}
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			// Resolve and validate the target before dialing, then dial the
+			// checked IP so a DNS rebind cannot slip a private address through.
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				host, port, err := net.SplitHostPort(addr)
+				if err != nil {
+					return nil, err
+				}
+				ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+				if err != nil {
+					return nil, err
+				}
+				for _, ip := range ips {
+					if isBlockedIP(ip.IP) {
+						return nil, fmt.Errorf("refusing to connect to non-public address %s", ip.IP)
+					}
+				}
+				return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+			},
+		},
+	}
+}
+
+func isBlockedIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast()
 }
 
 // Fetch is FetchAuth without upstream credentials.

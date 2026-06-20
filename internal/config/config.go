@@ -44,6 +44,11 @@ type Config struct {
 	AccessMode        AccessMode
 	AllowRegistration bool
 
+	// AllowPrivateTargets permits the feed proxy to fetch loopback/private/
+	// link-local addresses. Default true (self-hosted internal calendars); set
+	// false on multi-user/public instances to mitigate SSRF.
+	AllowPrivateTargets bool
+
 	OIDC OIDCConfig
 	SMTP SMTPConfig
 }
@@ -82,13 +87,14 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		SecretKey:         os.Getenv("TIDYDAV_SECRET_KEY"),
-		BaseURL:           strings.TrimRight(os.Getenv("TIDYDAV_BASE_URL"), "/"),
-		DBPath:            envDefault("TIDYDAV_DB_PATH", "/data/tidydav.db"),
-		ListenAddr:        envDefault("TIDYDAV_LISTEN_ADDR", ":8080"),
-		LogLevel:          level,
-		AccessMode:        AccessMode(strings.ToLower(envDefault("TIDYDAV_ACCESS_MODE", string(AccessAuth)))),
-		AllowRegistration: envBool("TIDYDAV_ALLOW_REGISTRATION", true),
+		SecretKey:           os.Getenv("TIDYDAV_SECRET_KEY"),
+		BaseURL:             strings.TrimRight(os.Getenv("TIDYDAV_BASE_URL"), "/"),
+		DBPath:              envDefault("TIDYDAV_DB_PATH", "/data/tidydav.db"),
+		ListenAddr:          envDefault("TIDYDAV_LISTEN_ADDR", ":8080"),
+		LogLevel:            level,
+		AccessMode:          AccessMode(strings.ToLower(envDefault("TIDYDAV_ACCESS_MODE", string(AccessAuth)))),
+		AllowRegistration:   envBool("TIDYDAV_ALLOW_REGISTRATION", true),
+		AllowPrivateTargets: envBool("TIDYDAV_ALLOW_PRIVATE_TARGETS", true),
 		OIDC: OIDCConfig{
 			IssuerURL:    strings.TrimRight(os.Getenv("TIDYDAV_OIDC_ISSUER_URL"), "/"),
 			ClientID:     os.Getenv("TIDYDAV_OIDC_CLIENT_ID"),

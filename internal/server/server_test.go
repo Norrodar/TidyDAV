@@ -26,12 +26,13 @@ func newTestServer(t *testing.T) *server.Server {
 func newTestServerWithApp(t *testing.T) (*server.Server, *app.App) {
 	t.Helper()
 	cfg := &config.Config{
-		SecretKey:         "k",
-		BaseURL:           "https://x.example.com",
-		DBPath:            filepath.Join(t.TempDir(), "srv.db"),
-		AccessMode:        config.AccessAuth,
-		AllowRegistration: true,
-		SMTP:              config.SMTPConfig{Encryption: config.SMTPStartTLS},
+		SecretKey:           "k",
+		BaseURL:             "https://x.example.com",
+		DBPath:              filepath.Join(t.TempDir(), "srv.db"),
+		AccessMode:          config.AccessAuth,
+		AllowRegistration:   true,
+		AllowPrivateTargets: true,
+		SMTP:                config.SMTPConfig{Encryption: config.SMTPStartTLS},
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	a, err := app.New(context.Background(), cfg, logger, "test")

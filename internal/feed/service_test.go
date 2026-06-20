@@ -30,7 +30,7 @@ func newSvc(t *testing.T) *Service {
 	if err := st.Migrate(context.Background()); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return NewService(proxy.NewFetcher(st, logger), logger)
+	return NewService(proxy.NewFetcher(st, logger, true), logger)
 }
 
 func upstreamServer(t *testing.T) *httptest.Server {

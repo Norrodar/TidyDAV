@@ -46,7 +46,7 @@ func TestFetchFreshCacheSkipsUpstream(t *testing.T) {
 	cache := newFakeCache()
 	cache.m[srv.URL] = &store.CachedFeed{URL: srv.URL, Body: []byte("CACHED"), FetchedAt: time.Now()}
 
-	body, src, err := NewFetcher(cache, testLogger()).Fetch(context.Background(), srv.URL, time.Hour)
+	body, src, err := NewFetcher(cache, testLogger(), true).Fetch(context.Background(), srv.URL, time.Hour)
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestFetchUpstreamPopulatesCache(t *testing.T) {
 	defer srv.Close()
 
 	cache := newFakeCache()
-	body, src, err := NewFetcher(cache, testLogger()).Fetch(context.Background(), srv.URL, time.Hour)
+	body, src, err := NewFetcher(cache, testLogger(), true).Fetch(context.Background(), srv.URL, time.Hour)
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestFetchStaleOnError(t *testing.T) {
 		URL: srv.URL, Body: []byte("STALE"), FetchedAt: time.Now().Add(-time.Hour),
 	}
 
-	body, src, err := NewFetcher(cache, testLogger()).Fetch(context.Background(), srv.URL, time.Minute)
+	body, src, err := NewFetcher(cache, testLogger(), true).Fetch(context.Background(), srv.URL, time.Minute)
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestFetchNoCacheError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, _, err := NewFetcher(newFakeCache(), testLogger()).Fetch(context.Background(), srv.URL, time.Minute); err == nil {
+	if _, _, err := NewFetcher(newFakeCache(), testLogger(), true).Fetch(context.Background(), srv.URL, time.Minute); err == nil {
 		t.Fatal("expected error when upstream fails and cache is empty")
 	}
 }
@@ -125,11 +125,24 @@ func TestFetch304ReusesBody(t *testing.T) {
 		URL: srv.URL, Body: []byte("OLD"), ETag: "v1", FetchedAt: time.Now().Add(-time.Hour),
 	}
 
-	body, src, err := NewFetcher(cache, testLogger()).Fetch(context.Background(), srv.URL, time.Minute)
+	body, src, err := NewFetcher(cache, testLogger(), true).Fetch(context.Background(), srv.URL, time.Minute)
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
 	if string(body) != "OLD" || src != SourceUpstream {
 		t.Errorf("got (%q, %s), want (OLD, upstream via 304)", body, src)
+	}
+}
+
+func TestFetchBlocksPrivateTargets(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("SECRET"))
+	}))
+	defer srv.Close()
+
+	// With the guard on, the loopback httptest address must be refused.
+	f := NewFetcher(newFakeCache(), testLogger(), false)
+	if _, _, err := f.Fetch(context.Background(), srv.URL, 0); err == nil {
+		t.Fatal("expected refusal to connect to a loopback address")
 	}
 }

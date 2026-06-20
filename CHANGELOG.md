@@ -46,5 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   delivery failure — the URL is redacted in error messages.
 - Rename rules now reject an empty pattern, which previously inserted the replacement
   between every character of a field.
+- Optional SSRF hardening for the feed proxy: `TIDYDAV_ALLOW_PRIVATE_TARGETS=false`
+  refuses fetches to loopback/private/link-local addresses, validated at dial time so a
+  DNS rebind cannot bypass it.
 
 [Unreleased]: https://github.com/Norrodar/TidyDAV/commits/main
