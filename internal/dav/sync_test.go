@@ -35,11 +35,11 @@ func (f *fakeColl) Get(_ context.Context, href string) (Item, error) {
 	return it, nil
 }
 
-func (f *fakeColl) Put(_ context.Context, item Item) (string, error) {
+func (f *fakeColl) Put(_ context.Context, item Item) (Item, error) {
 	f.seq++
-	etag := fmt.Sprintf("etag-%d", f.seq)
-	f.items[item.Href] = Item{Href: item.Href, ETag: etag, Data: item.Data}
-	return etag, nil
+	stored := Item{Href: item.Href, ETag: fmt.Sprintf("etag-%d", f.seq), Data: item.Data}
+	f.items[item.Href] = stored
+	return stored, nil
 }
 
 func (f *fakeColl) Delete(_ context.Context, href string) error {

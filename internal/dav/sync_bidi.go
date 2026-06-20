@@ -51,17 +51,18 @@ func dataOf(ctx context.Context, coll Collection, si sideItem) ([]byte, error) {
 	return item.Data, nil
 }
 
-// copyItem copies si from one collection to another at toHref, returning the new ETag.
-func copyItem(ctx context.Context, from, to Collection, si sideItem, toHref string) (string, error) {
+// copyItem copies si from one collection to another at toHref, returning the
+// stored item (its server-canonical Href and new ETag).
+func copyItem(ctx context.Context, from, to Collection, si sideItem, toHref string) (Item, error) {
 	data, err := dataOf(ctx, from, si)
 	if err != nil {
-		return "", err
+		return Item{}, err
 	}
-	etag, err := to.Put(ctx, Item{Href: toHref, Data: data})
+	stored, err := to.Put(ctx, Item{Href: toHref, Data: data})
 	if err != nil {
-		return "", fmt.Errorf("put %s: %w", toHref, err)
+		return Item{}, fmt.Errorf("put %s: %w", toHref, err)
 	}
-	return etag, nil
+	return stored, nil
 }
 
 // winnerIsA decides a both-changed conflict. SourceWins (and the newest-wins
@@ -137,18 +138,18 @@ func syncBidirectional(ctx context.Context, a, b Collection, state *State, opts 
 			case !ai.changed && !bi.changed:
 				// in sync, nothing to do
 			case ai.changed && !bi.changed:
-				etag, err := copyItem(ctx, a, b, ai, bi.href)
+				stored, err := copyItem(ctx, a, b, ai, bi.href)
 				if err != nil {
 					return res, err
 				}
-				state.Items[uid] = ItemState{UID: uid, SrcHref: ai.href, SrcETag: ai.etag, DstHref: bi.href, DstETag: etag}
+				state.Items[uid] = ItemState{UID: uid, SrcHref: ai.href, SrcETag: ai.etag, DstHref: stored.Href, DstETag: stored.ETag}
 				res.Updated++
 			case bi.changed && !ai.changed:
-				etag, err := copyItem(ctx, b, a, bi, ai.href)
+				stored, err := copyItem(ctx, b, a, bi, ai.href)
 				if err != nil {
 					return res, err
 				}
-				state.Items[uid] = ItemState{UID: uid, SrcHref: ai.href, SrcETag: etag, DstHref: bi.href, DstETag: bi.etag}
+				state.Items[uid] = ItemState{UID: uid, SrcHref: stored.Href, SrcETag: stored.ETag, DstHref: bi.href, DstETag: bi.etag}
 				res.Updated++
 			default:
 				aWins, err := winnerIsA(ctx, a, b, ai, bi, opts)
@@ -156,17 +157,17 @@ func syncBidirectional(ctx context.Context, a, b Collection, state *State, opts 
 					return res, err
 				}
 				if aWins {
-					etag, err := copyItem(ctx, a, b, ai, bi.href)
+					stored, err := copyItem(ctx, a, b, ai, bi.href)
 					if err != nil {
 						return res, err
 					}
-					state.Items[uid] = ItemState{UID: uid, SrcHref: ai.href, SrcETag: ai.etag, DstHref: bi.href, DstETag: etag}
+					state.Items[uid] = ItemState{UID: uid, SrcHref: ai.href, SrcETag: ai.etag, DstHref: stored.Href, DstETag: stored.ETag}
 				} else {
-					etag, err := copyItem(ctx, b, a, bi, ai.href)
+					stored, err := copyItem(ctx, b, a, bi, ai.href)
 					if err != nil {
 						return res, err
 					}
-					state.Items[uid] = ItemState{UID: uid, SrcHref: ai.href, SrcETag: etag, DstHref: bi.href, DstETag: bi.etag}
+					state.Items[uid] = ItemState{UID: uid, SrcHref: stored.Href, SrcETag: stored.ETag, DstHref: bi.href, DstETag: bi.etag}
 				}
 				res.Updated++
 			}
@@ -179,12 +180,11 @@ func syncBidirectional(ctx context.Context, a, b Collection, state *State, opts 
 				delete(state.Items, uid)
 				res.Deleted++
 			} else {
-				href := destHref(uid)
-				etag, err := copyItem(ctx, a, b, ai, href)
+				stored, err := copyItem(ctx, a, b, ai, destHref(uid))
 				if err != nil {
 					return res, err
 				}
-				state.Items[uid] = ItemState{UID: uid, SrcHref: ai.href, SrcETag: ai.etag, DstHref: href, DstETag: etag}
+				state.Items[uid] = ItemState{UID: uid, SrcHref: ai.href, SrcETag: ai.etag, DstHref: stored.Href, DstETag: stored.ETag}
 				res.Created++
 			}
 
@@ -196,12 +196,11 @@ func syncBidirectional(ctx context.Context, a, b Collection, state *State, opts 
 				delete(state.Items, uid)
 				res.Deleted++
 			} else {
-				href := destHref(uid)
-				etag, err := copyItem(ctx, b, a, bi, href)
+				stored, err := copyItem(ctx, b, a, bi, destHref(uid))
 				if err != nil {
 					return res, err
 				}
-				state.Items[uid] = ItemState{UID: uid, SrcHref: href, SrcETag: etag, DstHref: bi.href, DstETag: bi.etag}
+				state.Items[uid] = ItemState{UID: uid, SrcHref: stored.Href, SrcETag: stored.ETag, DstHref: bi.href, DstETag: bi.etag}
 				res.Created++
 			}
 

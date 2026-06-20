@@ -28,8 +28,9 @@ type Item struct {
 type Collection interface {
 	List(ctx context.Context) ([]ItemMeta, error)
 	Get(ctx context.Context, href string) (Item, error)
-	// Put creates or replaces an item and returns its new ETag.
-	Put(ctx context.Context, item Item) (etag string, err error)
+	// Put creates or replaces an item and returns the stored item (its
+	// server-canonical Href and new ETag).
+	Put(ctx context.Context, item Item) (Item, error)
 	Delete(ctx context.Context, href string) error
 }
 

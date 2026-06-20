@@ -68,19 +68,18 @@ func syncOneWay(ctx context.Context, src, dst Collection, state *State, uidFn fu
 		cur.SrcETag = meta.ETag
 
 		if cur.DstHref == "" {
-			href := destHref(uid)
-			etag, err := dst.Put(ctx, Item{Href: href, Data: item.Data})
+			stored, err := dst.Put(ctx, Item{Href: destHref(uid), Data: item.Data})
 			if err != nil {
-				return res, fmt.Errorf("create %s: %w", href, err)
+				return res, fmt.Errorf("create: %w", err)
 			}
-			cur.DstHref, cur.DstETag = href, etag
+			cur.DstHref, cur.DstETag = stored.Href, stored.ETag
 			res.Created++
 		} else {
-			etag, err := dst.Put(ctx, Item{Href: cur.DstHref, ETag: cur.DstETag, Data: item.Data})
+			stored, err := dst.Put(ctx, Item{Href: cur.DstHref, ETag: cur.DstETag, Data: item.Data})
 			if err != nil {
 				return res, fmt.Errorf("update %s: %w", cur.DstHref, err)
 			}
-			cur.DstETag = etag
+			cur.DstHref, cur.DstETag = stored.Href, stored.ETag
 			res.Updated++
 		}
 		state.Items[uid] = cur
