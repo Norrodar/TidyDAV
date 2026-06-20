@@ -19,22 +19,35 @@
   $effect(() => {
     const color = session.accentColor;
     if (!color) return;
-    document.documentElement.style.setProperty('--accent', color);
-    // Lighten by ~30 per channel for hover state.
     try {
       const hex = color.replace('#', '');
-      const full = hex.length === 3
-        ? hex.split('').map((c) => c + c).join('')
-        : hex;
-      const r = Math.min(255, parseInt(full.slice(0, 2), 16) + 30);
-      const g = Math.min(255, parseInt(full.slice(2, 4), 16) + 30);
-      const b = Math.min(255, parseInt(full.slice(4, 6), 16) + 30);
-      const hover = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+      const full =
+        hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
+      const r = parseInt(full.slice(0, 2), 16);
+      const g = parseInt(full.slice(2, 4), 16);
+      const b = parseInt(full.slice(4, 6), 16);
+
+      document.documentElement.style.setProperty('--accent', color);
+
+      // Hover: lighten each channel by ~30.
+      const rh = Math.min(255, r + 30);
+      const gh = Math.min(255, g + 30);
+      const bh = Math.min(255, b + 30);
+      const hover = `#${rh.toString(16).padStart(2, '0')}${gh.toString(16).padStart(2, '0')}${bh.toString(16).padStart(2, '0')}`;
       document.documentElement.style.setProperty('--accent-hover', hover);
-      document.documentElement.style.setProperty(
-        '--focus-ring',
-        `0 0 0 3px ${color}55`
-      );
+
+      // Relative luminance (WCAG 2.x) — determines readable text color on
+      // the accent background. Values > 0.179 (roughly mid-range) need dark
+      // text; below that white text is fine.
+      const linearize = (c: number) => {
+        const s = c / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+      };
+      const lum = 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
+      const textOnAccent = lum > 0.179 ? '#0a0a0c' : '#ffffff';
+      document.documentElement.style.setProperty('--accent-text', textOnAccent);
+
+      document.documentElement.style.setProperty('--focus-ring', `0 0 0 3px ${color}55`);
     } catch {
       // Non-critical — ignore parse errors.
     }
