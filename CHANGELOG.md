@@ -96,6 +96,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed dead code: the unused user-level secret-id lookup (`UserBySecret` /
   `UserBySecretHash`) and unused `internal/ics` (`FieldURL`, `FieldAttendee`, `Start`,
   `End`) and `internal/proxy` (`Source.String`) symbols.
+- Added a toast system: feed/sync create, save, delete and run actions now show a brief
+  success (or error) confirmation. The rule editor shows per-rule descriptions, order
+  numbers and an "apply top to bottom" hint.
 
 ### Known limitations
 

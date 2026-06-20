@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { api, ApiError, type SyncJob } from '$lib/api';
+  import { toasts } from '$lib/state/toasts.svelte';
 
   let jobs = $state<SyncJob[]>([]);
   let loading = $state(true);
@@ -31,6 +32,8 @@
     try {
       const updated = await api.sync.run(job.id);
       jobs = jobs.map((j) => (j.id === updated.id ? updated : j));
+      const ok = updated.lastStatus.startsWith('ok');
+      toasts.show(ok ? 'Sync complete' : `Sync: ${updated.lastStatus}`, ok ? 'success' : 'error');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Run failed';
     } finally {
@@ -55,6 +58,7 @@
     try {
       await api.sync.remove(job.id);
       jobs = jobs.filter((j) => j.id !== job.id);
+      toasts.show('Sync job deleted');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Delete failed';
     }

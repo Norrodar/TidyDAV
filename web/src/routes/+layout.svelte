@@ -4,6 +4,7 @@
   import '$lib/styles/global.css';
   import { api } from '$lib/api';
   import { session } from '$lib/state/session.svelte';
+  import Toasts from '$lib/components/Toasts.svelte';
 
   let { children } = $props();
 
@@ -40,6 +41,8 @@
     {@render children()}
   </main>
 </div>
+
+<Toasts />
 
 <style>
   .app {

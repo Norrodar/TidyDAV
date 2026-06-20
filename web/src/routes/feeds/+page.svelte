@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { api, ApiError, type Feed } from '$lib/api';
+  import { toasts } from '$lib/state/toasts.svelte';
 
   let feeds = $state<Feed[]>([]);
   let loading = $state(true);
@@ -31,6 +32,7 @@
     try {
       await api.feeds.remove(feed.id);
       feeds = feeds.filter((f) => f.id !== feed.id);
+      toasts.show('Feed deleted');
     } catch (e) {
       error = e instanceof Error ? e.message : 'Delete failed';
     }

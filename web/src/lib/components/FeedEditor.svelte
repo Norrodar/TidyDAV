@@ -10,6 +10,7 @@
     type RuleType,
     type PreviewResult
   } from '$lib/api';
+  import { toasts } from '$lib/state/toasts.svelte';
 
   let { feed }: { feed?: Feed } = $props();
 
@@ -40,6 +41,23 @@
   let preview = $state<PreviewResult | null>(null);
 
   const ruleTypes: RuleType[] = ['filter', 'dedup', 'rename', 'strip', 'timezone', 'expire'];
+
+  function ruleHelp(type: RuleType): string {
+    switch (type) {
+      case 'filter':
+        return 'Keep or drop events whose chosen fields match the pattern.';
+      case 'dedup':
+        return 'Remove duplicate events sharing the same key fields (default: summary + date).';
+      case 'rename':
+        return 'Rewrite a text field by replacing matches ($1 references a regex group).';
+      case 'strip':
+        return 'Delete the listed fields from every event.';
+      case 'timezone':
+        return 'Convert event start/end times into the target timezone.';
+      case 'expire':
+        return 'Drop events that ended more than N days ago.';
+    }
+  }
 
   function defaultRule(type: RuleType): RuleConfig {
     switch (type) {
@@ -121,6 +139,7 @@
     try {
       if (feed) await api.feeds.update(feed.id, buildInput());
       else await api.feeds.create(buildInput());
+      toasts.show(feed ? 'Feed saved' : 'Feed created');
       await goto('/feeds');
     } catch (e) {
       error = e instanceof ApiError ? e.message : 'Save failed';
@@ -178,10 +197,13 @@
     </div>
     {#if rules.length === 0}
       <p class="muted">No rules — the merged feed is served as-is.</p>
+    {:else}
+      <p class="muted">Rules apply top to bottom.</p>
     {/if}
     {#each rules as rule, i (i)}
       <div class="rule">
         <div class="rule-head">
+          <span class="rule-num">{i + 1}</span>
           <select
             class="input"
             value={rule.type}
@@ -193,6 +215,7 @@
           </select>
           <button type="button" class="icon" onclick={() => removeRule(i)} aria-label="Remove">×</button>
         </div>
+        <p class="rule-desc">{ruleHelp(rule.type)}</p>
 
         {#if rule.type === 'filter'}
           <div class="rule-fields">
@@ -433,6 +456,23 @@
     display: flex;
     gap: var(--space-2);
     align-items: center;
+  }
+  .rule-num {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-full);
+    background: var(--bg-base);
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+  }
+  .rule-desc {
+    margin: 0;
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
   }
   .rule-head select {
     width: 160px;

@@ -10,6 +10,7 @@
     type SyncDirection,
     type SyncConflict
   } from '$lib/api';
+  import { toasts } from '$lib/state/toasts.svelte';
 
   let { job }: { job?: SyncJob } = $props();
   const initial = untrack(() => job);
@@ -53,6 +54,7 @@
     try {
       if (job) await api.sync.update(job.id, buildInput());
       else await api.sync.create(buildInput());
+      toasts.show(job ? 'Sync job saved' : 'Sync job created');
       await goto('/sync');
     } catch (e) {
       error = e instanceof ApiError ? e.message : 'Save failed';
