@@ -133,7 +133,27 @@
     };
   }
 
+  // Returns a message for the first rule with an invalid regex, else null.
+  function regexError(): string | null {
+    for (let i = 0; i < rules.length; i++) {
+      const r = rules[i];
+      if ((r.type === 'filter' || r.type === 'rename') && r.matchMode === 'regex' && r.pattern) {
+        try {
+          new RegExp(r.pattern);
+        } catch {
+          return `Rule ${i + 1}: invalid regular expression.`;
+        }
+      }
+    }
+    return null;
+  }
+
   async function save() {
+    const re = regexError();
+    if (re) {
+      error = re;
+      return;
+    }
     saving = true;
     error = null;
     try {
@@ -149,6 +169,11 @@
   }
 
   async function runPreview() {
+    const re = regexError();
+    if (re) {
+      error = re;
+      return;
+    }
     previewing = true;
     error = null;
     try {
