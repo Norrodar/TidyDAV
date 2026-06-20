@@ -63,6 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (starttls/tls/none) and `/auth/reset/request` + `/auth/reset/confirm` endpoints. Tokens
   are hashed, expire in 1 hour and are pruned by the cleanup job; responses never reveal
   whether an email exists. The session payload exposes `mailEnabled`.
+- Web UI for password reset: request and confirm pages, plus a "Forgot password?" link on
+  the sign-in page (shown when SMTP is configured).
 
 ### Fixed
 

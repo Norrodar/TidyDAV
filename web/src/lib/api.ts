@@ -20,6 +20,7 @@ export interface SessionResponse {
   accessMode: AccessMode;
   oidcEnabled: boolean;
   registrationEnabled: boolean;
+  mailEnabled: boolean;
 }
 
 /** Error thrown for non-2xx API responses, carrying the HTTP status. */
@@ -213,6 +214,10 @@ export const api = {
   register: (email: string, password: string) =>
     request<SessionResponse>('/auth/register', jsonBody('POST', { email, password })),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
+  requestPasswordReset: (email: string) =>
+    request<void>('/auth/reset/request', jsonBody('POST', { email })),
+  confirmPasswordReset: (token: string, password: string) =>
+    request<void>('/auth/reset/confirm', jsonBody('POST', { token, password })),
 
   feeds: {
     list: () => request<Feed[]>('/api/feeds'),

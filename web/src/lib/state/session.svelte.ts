@@ -9,6 +9,7 @@ class SessionState {
   accessMode = $state<AccessMode>('auth');
   oidcEnabled = $state(false);
   registrationEnabled = $state(true);
+  mailEnabled = $state(false);
   loading = $state(true);
   error = $state<string | null>(null);
 
@@ -20,6 +21,7 @@ class SessionState {
     this.accessMode = s.accessMode;
     this.oidcEnabled = s.oidcEnabled;
     this.registrationEnabled = s.registrationEnabled;
+    this.mailEnabled = s.mailEnabled;
   }
 
   /** Fetch the current session from the backend. */

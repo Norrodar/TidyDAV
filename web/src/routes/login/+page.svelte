@@ -58,6 +58,9 @@
     {#if session.registrationEnabled}
       <p class="hint">No account? <a href="/register">Create one</a></p>
     {/if}
+    {#if session.mailEnabled}
+      <p class="hint"><a href="/reset/request">Forgot password?</a></p>
+    {/if}
   </div>
 </div>
 
