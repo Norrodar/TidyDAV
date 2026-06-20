@@ -37,6 +37,7 @@ func (s *Server) routes(mux *http.ServeMux) error {
 	mux.HandleFunc("POST /auth/reset/confirm", s.handleResetConfirm)
 	mux.HandleFunc("GET /auth/oidc/login", s.handleOIDCLogin)
 	mux.HandleFunc("GET /auth/oidc/callback", s.handleOIDCCallback)
+	mux.HandleFunc("GET /auth/oidc/logout", s.handleOIDCLogout)
 
 	// Transformed ICS output, secured by secret-id (no session).
 	mux.HandleFunc("GET /ics/{secret}", s.handleICS)

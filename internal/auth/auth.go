@@ -21,6 +21,7 @@ var (
 	ErrEmailTaken         = errors.New("auth: email already registered")
 	ErrAnonymousDisabled  = errors.New("auth: anonymous access is disabled")
 	ErrOIDCNotConfigured  = errors.New("auth: oidc is not configured")
+	ErrGroupNotAllowed    = errors.New("auth: user is not in an allowed group")
 	ErrInvalidResetToken  = errors.New("auth: invalid or expired reset token")
 )
 
@@ -57,8 +58,17 @@ func (s *Service) OIDCEnabled() bool { return s.oidc != nil }
 
 // RegistrationEnabled reports whether email+password self-registration is open.
 func (s *Service) RegistrationEnabled() bool {
+	if s.cfg.OIDC.Only {
+		return false
+	}
 	return s.cfg.AllowRegistration && s.cfg.AccessMode != config.AccessPublic
 }
+
+// OIDCOnly reports whether only OIDC login is accepted (no passwords/registration).
+func (s *Service) OIDCOnly() bool { return s.cfg.OIDC.Only }
+
+// OIDCDisplayName returns the configured display name for the OIDC button.
+func (s *Service) OIDCDisplayName() string { return s.cfg.OIDC.DisplayName }
 
 // anonymousAllowed reports whether anonymous secret-id access is permitted.
 func (s *Service) anonymousAllowed() bool {

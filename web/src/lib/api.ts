@@ -12,6 +12,7 @@ export interface SessionUser {
   email: string | null;
   kind: 'oidc' | 'password' | 'secret';
   isAdmin: boolean;
+  avatarUrl: string;
 }
 
 export interface SessionResponse {
@@ -19,8 +20,11 @@ export interface SessionResponse {
   user: SessionUser | null;
   accessMode: AccessMode;
   oidcEnabled: boolean;
+  oidcDisplayName: string;
+  oidcOnly: boolean;
   registrationEnabled: boolean;
   mailEnabled: boolean;
+  accentColor?: string;
 }
 
 /** Error thrown for non-2xx API responses, carrying the HTTP status. */

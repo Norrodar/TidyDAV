@@ -8,8 +8,11 @@ class SessionState {
   user = $state<SessionUser | null>(null);
   accessMode = $state<AccessMode>('auth');
   oidcEnabled = $state(false);
+  oidcDisplayName = $state('SSO');
+  oidcOnly = $state(false);
   registrationEnabled = $state(true);
   mailEnabled = $state(false);
+  accentColor = $state<string | undefined>(undefined);
   loading = $state(true);
   error = $state<string | null>(null);
 
@@ -20,8 +23,11 @@ class SessionState {
     this.user = s.user;
     this.accessMode = s.accessMode;
     this.oidcEnabled = s.oidcEnabled;
+    this.oidcDisplayName = s.oidcDisplayName ?? 'SSO';
+    this.oidcOnly = s.oidcOnly ?? false;
     this.registrationEnabled = s.registrationEnabled;
     this.mailEnabled = s.mailEnabled;
+    this.accentColor = s.accentColor;
   }
 
   /** Fetch the current session from the backend. */

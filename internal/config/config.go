@@ -55,6 +55,10 @@ type Config struct {
 	// SyncTick is how often the DAV sync runner checks for due jobs.
 	SyncTick time.Duration
 
+	// AccentColor is an optional hex color (e.g. "#ff6b35") that replaces the
+	// default --accent CSS variable in the UI. Empty means use the default.
+	AccentColor string
+
 	OIDC OIDCConfig
 	SMTP SMTPConfig
 }
@@ -65,6 +69,27 @@ type OIDCConfig struct {
 	ClientID     string
 	ClientSecret string
 	Scopes       []string
+
+	// DisplayName is shown in the "Sign in with <DisplayName>" button.
+	// Defaults to "SSO".
+	DisplayName string
+
+	// AdminGroups lists group names (from the groups claim) that grant admin.
+	// Comma-separated. Empty means no group-based admin assignment.
+	AdminGroups []string
+
+	// UserGroups lists group names required for any access. When non-empty, a
+	// user not in AdminGroups AND not in UserGroups is rejected at login.
+	// Comma-separated.
+	UserGroups []string
+
+	// GroupClaim is the ID-token claim name that carries the user's groups.
+	// Defaults to "groups".
+	GroupClaim string
+
+	// Only disables password/email login entirely; only OIDC is allowed.
+	// Requires OIDC to be configured (IssuerURL + ClientID).
+	Only bool
 }
 
 // Enabled reports whether OIDC is configured.
@@ -103,11 +128,17 @@ func Load() (*Config, error) {
 		AllowPrivateTargets: envBool("TIDYDAV_ALLOW_PRIVATE_TARGETS", true),
 		NotifyInterval:      envDuration("TIDYDAV_NOTIFY_INTERVAL", 15*time.Minute),
 		SyncTick:            envDuration("TIDYDAV_SYNC_TICK", time.Minute),
+		AccentColor:         envHexColor("TIDYDAV_ACCENT_COLOR"),
 		OIDC: OIDCConfig{
 			IssuerURL:    strings.TrimRight(os.Getenv("TIDYDAV_OIDC_ISSUER_URL"), "/"),
 			ClientID:     os.Getenv("TIDYDAV_OIDC_CLIENT_ID"),
 			ClientSecret: os.Getenv("TIDYDAV_OIDC_CLIENT_SECRET"),
 			Scopes:       envFields("TIDYDAV_OIDC_SCOPES", []string{"openid", "profile", "email"}),
+			DisplayName:  envDefault("TIDYDAV_OIDC_DISPLAY_NAME", "SSO"),
+			AdminGroups:  envComma("TIDYDAV_OIDC_ADMIN_GROUPS"),
+			UserGroups:   envComma("TIDYDAV_OIDC_USER_GROUPS"),
+			GroupClaim:   envDefault("TIDYDAV_OIDC_GROUP_CLAIM", "groups"),
+			Only:         envBool("TIDYDAV_OIDC_ONLY", false),
 		},
 		SMTP: SMTPConfig{
 			Host:       os.Getenv("TIDYDAV_SMTP_HOST"),
@@ -146,6 +177,10 @@ func (c *Config) validate() error {
 	case SMTPStartTLS, SMTPTLS, SMTPNone:
 	default:
 		return fmt.Errorf("TIDYDAV_SMTP_ENCRYPTION must be starttls, tls or none, got %q", c.SMTP.Encryption)
+	}
+
+	if c.OIDC.Only && !c.OIDC.Enabled() {
+		return errors.New("TIDYDAV_OIDC_ONLY requires TIDYDAV_OIDC_ISSUER_URL and TIDYDAV_OIDC_CLIENT_ID")
 	}
 
 	return nil
@@ -200,6 +235,39 @@ func envFields(key string, def []string) []string {
 		return def
 	}
 	return strings.Fields(v)
+}
+
+// envComma splits a comma-separated env var, trimming whitespace from each item.
+// Returns nil when the variable is unset or empty.
+func envComma(key string) []string {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return nil
+	}
+	parts := strings.Split(v, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if s := strings.TrimSpace(p); s != "" {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+// envHexColor reads a hex color like "#0a84ff" or "0a84ff". Returns "" for
+// invalid/missing values so callers can use it as "no override".
+func envHexColor(key string) string {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return ""
+	}
+	if !strings.HasPrefix(v, "#") {
+		v = "#" + v
+	}
+	if len(v) != 4 && len(v) != 7 {
+		return ""
+	}
+	return strings.ToLower(v)
 }
 
 func parseLogLevel(s string) (slog.Level, error) {

@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { api, ApiError } from '$lib/api';
   import { session } from '$lib/state/session.svelte';
+  import { t, tSignInWith } from '$lib/i18n';
 
   let email = $state('');
   let password = $state('');
@@ -14,9 +15,9 @@
     error = null;
     try {
       session.apply(await api.login(email, password));
-      await goto('/feeds');
+      await goto('/');
     } catch (err) {
-      error = err instanceof ApiError ? err.message : 'Login failed';
+      error = err instanceof ApiError ? err.message : t('sign_in') + ' failed';
     } finally {
       submitting = false;
     }
@@ -25,43 +26,49 @@
 
 <div class="auth">
   <div class="card">
-    <h1>Sign in</h1>
-    <p class="subtitle">Welcome back.</p>
+    <h1>{t('sign_in')}</h1>
+    <p class="subtitle">{t('welcome_back')}</p>
 
-    <form onsubmit={submit}>
-      <label>
-        <span>Email</span>
-        <input class="input" type="email" bind:value={email} autocomplete="username" required />
-      </label>
-      <label>
-        <span>Password</span>
-        <input
-          class="input"
-          type="password"
-          bind:value={password}
-          autocomplete="current-password"
-          required
-        />
-      </label>
+    {#if !session.oidcOnly}
+      <form onsubmit={submit}>
+        <label>
+          <span>{t('email')}</span>
+          <input class="input" type="email" bind:value={email} autocomplete="username" required />
+        </label>
+        <label>
+          <span>{t('password')}</span>
+          <input
+            class="input"
+            type="password"
+            bind:value={password}
+            autocomplete="current-password"
+            required
+          />
+        </label>
 
-      {#if error}<p class="error">{error}</p>{/if}
+        {#if error}<p class="error">{error}</p>{/if}
 
-      <button class="button" type="submit" disabled={submitting}>
-        {submitting ? 'Signing in…' : 'Sign in'}
-      </button>
-    </form>
+        <button class="button submit-btn" type="submit" disabled={submitting}>
+          {submitting ? t('signing_in') : t('sign_in')}
+        </button>
+      </form>
+    {/if}
 
     {#if session.oidcEnabled}
-      <div class="divider"><span>or</span></div>
+      {#if !session.oidcOnly}
+        <div class="divider"><span>{t('or')}</span></div>
+      {/if}
 
-      <a class="button button-secondary" href="/auth/oidc/login">Continue with SSO</a>
+      <a class="button sso-btn" class:button-secondary={!session.oidcOnly} href="/auth/oidc/login">
+        {tSignInWith(session.oidcDisplayName)}
+      </a>
     {/if}
 
     {#if session.registrationEnabled}
-      <p class="hint">No account? <a href="/register">Create one</a></p>
+      <p class="hint">{t('no_account')} <a href="/register">{t('create_one')}</a></p>
     {/if}
-    {#if session.mailEnabled}
-      <p class="hint"><a href="/reset/request">Forgot password?</a></p>
+    {#if session.mailEnabled && !session.oidcOnly}
+      <p class="hint"><a href="/reset/request">{t('forgot_password')}</a></p>
     {/if}
   </div>
 </div>
@@ -102,7 +109,13 @@
     color: var(--text-secondary);
   }
 
-  .button[type='submit'] {
+  .submit-btn {
+    margin-top: var(--space-2);
+    width: 100%;
+  }
+
+  .sso-btn {
+    width: 100%;
     margin-top: var(--space-2);
   }
 

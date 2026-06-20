@@ -7,15 +7,20 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Norrodar/TidyDAV/internal/auth"
 	"github.com/Norrodar/TidyDAV/internal/config"
 	"github.com/Norrodar/TidyDAV/internal/store"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/oauth2"
 )
 
-const oidcStateCookie = "tidydav_oidc_state"
+const (
+	oidcStateCookie    = "tidydav_oidc_state"
+	oidcVerifierCookie = "tidydav_oidc_verifier"
+)
 
 // ── Response/request shapes (kept in sync with web/src/lib/api.ts) ──────────
 
@@ -25,10 +30,11 @@ type healthResponse struct {
 }
 
 type userResponse struct {
-	ID      string  `json:"id"`
-	Email   *string `json:"email"`
-	Kind    string  `json:"kind"`
-	IsAdmin bool    `json:"isAdmin"`
+	ID        string  `json:"id"`
+	Email     *string `json:"email"`
+	Kind      string  `json:"kind"`
+	IsAdmin   bool    `json:"isAdmin"`
+	AvatarURL string  `json:"avatarUrl"`
 }
 
 type sessionResponse struct {
@@ -36,8 +42,11 @@ type sessionResponse struct {
 	User                *userResponse `json:"user"`
 	AccessMode          string        `json:"accessMode"`
 	OIDCEnabled         bool          `json:"oidcEnabled"`
+	OIDCDisplayName     string        `json:"oidcDisplayName"`
+	OIDCOnly            bool          `json:"oidcOnly"`
 	RegistrationEnabled bool          `json:"registrationEnabled"`
 	MailEnabled         bool          `json:"mailEnabled"`
+	AccentColor         string        `json:"accentColor,omitempty"`
 }
 
 type credentialsRequest struct {
@@ -92,6 +101,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if s.app.Auth.OIDCOnly() {
+		writeError(w, http.StatusForbidden, "password login is disabled; use OIDC")
+		return
+	}
 	var req credentialsRequest
 	if !decodeJSON(w, r, &req) {
 		return
@@ -143,7 +156,11 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, "oidc state", err)
 		return
 	}
-	authURL, err := s.app.Auth.OIDCAuthCodeURL(state)
+
+	// Generate PKCE verifier; the challenge is embedded in the auth URL.
+	verifier := oauth2.GenerateVerifier()
+
+	authURL, err := s.app.Auth.OIDCAuthCodeURL(state, verifier)
 	if errors.Is(err, auth.ErrOIDCNotConfigured) {
 		writeError(w, http.StatusNotFound, "oidc is not configured")
 		return
@@ -152,12 +169,23 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, "oidc auth url", err)
 		return
 	}
+
+	secure := secureCookies(s.app.Config)
 	http.SetCookie(w, &http.Cookie{
 		Name:     oidcStateCookie,
 		Value:    state,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secureCookies(s.app.Config),
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   600,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     oidcVerifierCookie,
+		Value:    verifier,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   600,
 	})
@@ -170,12 +198,22 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid oauth state")
 		return
 	}
+	verifierCookie, err := r.Cookie(oidcVerifierCookie)
+	if err != nil || verifierCookie.Value == "" {
+		writeError(w, http.StatusBadRequest, "missing pkce verifier")
+		return
+	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		writeError(w, http.StatusBadRequest, "missing authorization code")
 		return
 	}
-	u, err := s.app.Auth.OIDCExchange(r.Context(), code)
+
+	u, err := s.app.Auth.OIDCExchange(r.Context(), code, verifierCookie.Value)
+	if errors.Is(err, auth.ErrGroupNotAllowed) {
+		writeError(w, http.StatusForbidden, "your account is not in an allowed group")
+		return
+	}
 	if err != nil {
 		s.serverError(w, "oidc exchange", err)
 		return
@@ -184,8 +222,37 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, "start session", err)
 		return
 	}
+	// Clear PKCE/state cookies.
 	http.SetCookie(w, &http.Cookie{Name: oidcStateCookie, Value: "", Path: "/", MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: oidcVerifierCookie, Value: "", Path: "/", MaxAge: -1})
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// handleOIDCLogout clears the TidyDAV session and redirects to the OIDC
+// provider's end_session_endpoint when available, falling back to the home page.
+func (s *Server) handleOIDCLogout(w http.ResponseWriter, r *http.Request) {
+	if err := s.app.Auth.Logout(r.Context(), w, r); err != nil {
+		s.serverError(w, "oidc logout", err)
+		return
+	}
+
+	endSession := s.app.Auth.OIDCEndSessionURL()
+	if endSession == "" {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
+	// Build the provider logout URL with post_logout_redirect_uri pointing home.
+	u, err := url.Parse(endSession)
+	if err != nil {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	q := u.Query()
+	q.Set("client_id", s.app.Config.OIDC.ClientID)
+	q.Set("post_logout_redirect_uri", s.app.Config.BaseURL+"/")
+	u.RawQuery = q.Encode()
+	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -196,8 +263,11 @@ func (s *Server) sessionPayload(u *store.User) sessionResponse {
 		User:                toUserResponse(u),
 		AccessMode:          string(s.app.Config.AccessMode),
 		OIDCEnabled:         s.app.Auth.OIDCEnabled(),
+		OIDCDisplayName:     s.app.Auth.OIDCDisplayName(),
+		OIDCOnly:            s.app.Auth.OIDCOnly(),
 		RegistrationEnabled: s.app.Auth.RegistrationEnabled(),
 		MailEnabled:         s.app.Auth.MailEnabled(),
+		AccentColor:         s.app.Config.AccentColor,
 	}
 }
 
@@ -210,7 +280,13 @@ func toUserResponse(u *store.User) *userResponse {
 		e := u.Email.String
 		email = &e
 	}
-	return &userResponse{ID: u.ID, Email: email, Kind: u.Kind, IsAdmin: u.IsAdmin}
+	return &userResponse{
+		ID:        u.ID,
+		Email:     email,
+		Kind:      u.Kind,
+		IsAdmin:   u.IsAdmin,
+		AvatarURL: u.AvatarURL,
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

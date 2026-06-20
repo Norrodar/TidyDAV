@@ -19,9 +19,10 @@ type User struct {
 	SecretHash   sql.NullString
 	IsAdmin      bool
 	CreatedAt    time.Time
+	AvatarURL    string
 }
 
-const userColumns = "id, kind, email, password_hash, oidc_subject, secret_hash, is_admin, created_at"
+const userColumns = "id, kind, email, password_hash, oidc_subject, secret_hash, is_admin, created_at, avatar_url"
 
 // CreateUser inserts a new user. CreatedAt defaults to now when zero.
 func (s *Store) CreateUser(ctx context.Context, u *User) error {
@@ -29,9 +30,9 @@ func (s *Store) CreateUser(ctx context.Context, u *User) error {
 		u.CreatedAt = time.Now().UTC()
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO users (`+userColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO users (`+userColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, u.Kind, u.Email, u.PasswordHash, u.OIDCSubject, u.SecretHash,
-		boolToInt(u.IsAdmin), u.CreatedAt.UTC().Format(time.RFC3339),
+		boolToInt(u.IsAdmin), u.CreatedAt.UTC().Format(time.RFC3339), u.AvatarURL,
 	)
 	if err != nil {
 		return fmt.Errorf("create user: %w", err)
@@ -67,6 +68,20 @@ func (s *Store) userBy(ctx context.Context, column, value string) (*User, error)
 	return u, nil
 }
 
+// UpdateUserAvatarAndAdmin updates the avatar URL and admin flag for an existing
+// user. Called on every OIDC login to sync the latest picture and group-derived
+// admin status from the identity provider.
+func (s *Store) UpdateUserAvatarAndAdmin(ctx context.Context, id, avatarURL string, isAdmin bool) error {
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE users SET avatar_url = ?, is_admin = ? WHERE id = ?",
+		avatarURL, boolToInt(isAdmin), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update user avatar/admin: %w", err)
+	}
+	return nil
+}
+
 // CreateUserBootstrapAdmin inserts a user, atomically marking it admin only when
 // it is the very first user. The count and insert run in one transaction so two
 // concurrent first registrations cannot both become admin. On success u.IsAdmin
@@ -88,9 +103,9 @@ func (s *Store) CreateUserBootstrapAdmin(ctx context.Context, u *User) error {
 	u.IsAdmin = count == 0
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO users (`+userColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO users (`+userColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, u.Kind, u.Email, u.PasswordHash, u.OIDCSubject, u.SecretHash,
-		boolToInt(u.IsAdmin), u.CreatedAt.UTC().Format(time.RFC3339),
+		boolToInt(u.IsAdmin), u.CreatedAt.UTC().Format(time.RFC3339), u.AvatarURL,
 	); err != nil {
 		return fmt.Errorf("create user: %w", err)
 	}
@@ -104,7 +119,7 @@ func scanUser(sc rowScanner) (*User, error) {
 		createdAt string
 	)
 	if err := sc.Scan(&u.ID, &u.Kind, &u.Email, &u.PasswordHash, &u.OIDCSubject,
-		&u.SecretHash, &isAdmin, &createdAt); err != nil {
+		&u.SecretHash, &isAdmin, &createdAt, &u.AvatarURL); err != nil {
 		return nil, err
 	}
 	u.IsAdmin = isAdmin != 0
