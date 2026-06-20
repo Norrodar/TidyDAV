@@ -5,6 +5,7 @@
   import { api } from '$lib/api';
   import { session } from '$lib/state/session.svelte';
   import Toasts from '$lib/components/Toasts.svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
   let { children } = $props();
 
@@ -43,6 +44,7 @@
 </div>
 
 <Toasts />
+<ConfirmDialog />
 
 <style>
   .app {

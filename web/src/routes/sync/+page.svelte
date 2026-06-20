@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { api, ApiError, type SyncJob } from '$lib/api';
   import { toasts } from '$lib/state/toasts.svelte';
+  import { confirmDialog } from '$lib/state/confirm.svelte';
 
   let jobs = $state<SyncJob[]>([]);
   let loading = $state(true);
@@ -54,7 +55,7 @@
   }
 
   async function remove(job: SyncJob) {
-    if (!confirm(`Delete sync job “${job.name}”?`)) return;
+    if (!(await confirmDialog.ask(`Delete sync job “${job.name}”?`, 'Delete'))) return;
     try {
       await api.sync.remove(job.id);
       jobs = jobs.filter((j) => j.id !== job.id);

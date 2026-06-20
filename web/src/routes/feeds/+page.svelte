@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { api, ApiError, type Feed } from '$lib/api';
   import { toasts } from '$lib/state/toasts.svelte';
+  import { confirmDialog } from '$lib/state/confirm.svelte';
 
   let feeds = $state<Feed[]>([]);
   let loading = $state(true);
@@ -28,7 +29,7 @@
   onMount(load);
 
   async function remove(feed: Feed) {
-    if (!confirm(`Delete feed “${feed.name}”?`)) return;
+    if (!(await confirmDialog.ask(`Delete feed “${feed.name}”?`, 'Delete'))) return;
     try {
       await api.feeds.remove(feed.id);
       feeds = feeds.filter((f) => f.id !== feed.id);
