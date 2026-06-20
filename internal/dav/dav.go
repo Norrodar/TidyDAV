@@ -78,6 +78,16 @@ type Options struct {
 	// Modified extracts the last-modified time from an item body, used by the
 	// newest-wins conflict policy. When nil, conflicts fall back to source-wins.
 	Modified func([]byte) time.Time
+	// HrefSuffix is appended to generated destination hrefs (".ics" for CalDAV,
+	// ".vcf" for CardDAV). Defaults to ".ics".
+	HrefSuffix string
+}
+
+func (o Options) suffix() string {
+	if o.HrefSuffix == "" {
+		return ".ics"
+	}
+	return o.HrefSuffix
 }
 
 // Result counts what a sync run changed on the destination side(s).

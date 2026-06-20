@@ -46,8 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`notifications`, Gotify token write-only) and a notifications section in the feed editor.
 - DAV sync engine (`internal/dav`): UID-matched CalDAV/CardDAV reconciliation — uni- and
   bidirectional, with newest-wins / source-wins conflict resolution and a change-beats-delete
-  safety rule. Tested against an in-memory fake client. (Real go-webdav client and job
-  wiring come next.)
+  safety rule. Tested against an in-memory fake client. Includes go-webdav-backed CalDAV and
+  CardDAV collection clients (Basic Auth supported) and ICS/vCard UID/modified extractors.
+  (Job model, scheduler wiring and UI come next.)
 
 ### Fixed
 

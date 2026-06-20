@@ -24,3 +24,18 @@ func TestCalendarUIDAndModified(t *testing.T) {
 		t.Error("unparseable body should yield zero time")
 	}
 }
+
+func TestContactUIDAndModified(t *testing.T) {
+	data := []byte("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:abc\r\nFN:Jane\r\nREV:20260102T100000Z\r\nEND:VCARD\r\n")
+
+	if uid := ContactUID(data); uid != "urn:uuid:abc" {
+		t.Errorf("ContactUID = %q, want urn:uuid:abc", uid)
+	}
+	m := ContactModified(data)
+	if m.IsZero() || m.UTC().Format("2006-01-02") != "2026-01-02" {
+		t.Errorf("ContactModified = %v, want 2026-01-02", m)
+	}
+	if ContactUID([]byte("not a vcard")) != "" {
+		t.Error("unparseable body should yield empty UID")
+	}
+}

@@ -17,9 +17,9 @@ func Sync(ctx context.Context, a, b Collection, state *State, opts Options) (Res
 
 	switch opts.Direction {
 	case AToB:
-		return syncOneWay(ctx, a, b, state, opts.UID)
+		return syncOneWay(ctx, a, b, state, opts)
 	case BToA:
-		return syncOneWay(ctx, b, a, state, opts.UID)
+		return syncOneWay(ctx, b, a, state, opts)
 	case Bidirectional:
 		return syncBidirectional(ctx, a, b, state, opts)
 	default:
@@ -30,8 +30,9 @@ func Sync(ctx context.Context, a, b Collection, state *State, opts Options) (Res
 // syncOneWay mirrors src onto dst: creates/updates changed items and deletes
 // destination items whose source counterpart is gone. State.Items[*].Src* refer
 // to src and Dst* to dst.
-func syncOneWay(ctx context.Context, src, dst Collection, state *State, uidFn func([]byte) string) (Result, error) {
+func syncOneWay(ctx context.Context, src, dst Collection, state *State, opts Options) (Result, error) {
 	var res Result
+	uidFn := opts.UID
 
 	stateBySrcHref := make(map[string]ItemState, len(state.Items))
 	for _, st := range state.Items {
@@ -68,7 +69,7 @@ func syncOneWay(ctx context.Context, src, dst Collection, state *State, uidFn fu
 		cur.SrcETag = meta.ETag
 
 		if cur.DstHref == "" {
-			stored, err := dst.Put(ctx, Item{Href: destHref(uid), Data: item.Data})
+			stored, err := dst.Put(ctx, Item{Href: destHref(uid, opts.suffix()), Data: item.Data})
 			if err != nil {
 				return res, fmt.Errorf("create: %w", err)
 			}
@@ -102,8 +103,8 @@ func syncOneWay(ctx context.Context, src, dst Collection, state *State, uidFn fu
 	return res, nil
 }
 
-// destHref derives a safe destination href from a UID.
-func destHref(uid string) string {
+// destHref derives a safe destination href from a UID plus a suffix (e.g. .ics).
+func destHref(uid, suffix string) string {
 	safe := strings.Map(func(r rune) rune {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
@@ -115,5 +116,5 @@ func destHref(uid string) string {
 	if safe == "" {
 		safe = "item"
 	}
-	return safe + ".ics"
+	return safe + suffix
 }

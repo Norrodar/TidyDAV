@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Norrodar/TidyDAV/internal/ics"
+	"github.com/emersion/go-vcard"
 )
 
 // CalendarUID returns the UID of the first component that has one (VEVENT/VTODO)
@@ -38,4 +39,29 @@ func CalendarModified(data []byte) time.Time {
 		}
 	}
 	return latest
+}
+
+// ContactUID returns the UID of a vCard body, or "" if it cannot be parsed.
+func ContactUID(data []byte) string {
+	card, err := vcard.NewDecoder(bytes.NewReader(data)).Decode()
+	if err != nil {
+		return ""
+	}
+	return card.Value(vcard.FieldUID)
+}
+
+// ContactModified returns the REV (revision) timestamp of a vCard, used by the
+// newest-wins conflict policy.
+func ContactModified(data []byte) time.Time {
+	card, err := vcard.NewDecoder(bytes.NewReader(data)).Decode()
+	if err != nil {
+		return time.Time{}
+	}
+	rev := card.Value(vcard.FieldRevision)
+	for _, layout := range []string{"20060102T150405Z", time.RFC3339, "2006-01-02T15:04:05Z07:00"} {
+		if t, err := time.Parse(layout, rev); err == nil {
+			return t.UTC()
+		}
+	}
+	return time.Time{}
 }

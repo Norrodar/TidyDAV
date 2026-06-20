@@ -180,7 +180,7 @@ func syncBidirectional(ctx context.Context, a, b Collection, state *State, opts 
 				delete(state.Items, uid)
 				res.Deleted++
 			} else {
-				stored, err := copyItem(ctx, a, b, ai, destHref(uid))
+				stored, err := copyItem(ctx, a, b, ai, destHref(uid, opts.suffix()))
 				if err != nil {
 					return res, err
 				}
@@ -196,7 +196,7 @@ func syncBidirectional(ctx context.Context, a, b Collection, state *State, opts 
 				delete(state.Items, uid)
 				res.Deleted++
 			} else {
-				stored, err := copyItem(ctx, b, a, bi, destHref(uid))
+				stored, err := copyItem(ctx, b, a, bi, destHref(uid, opts.suffix()))
 				if err != nil {
 					return res, err
 				}
