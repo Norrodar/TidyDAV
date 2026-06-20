@@ -26,13 +26,14 @@ type Feed struct {
 	Rules         json.RawMessage // JSON array of pipeline rule configs
 	TTLSeconds    int
 	BasicAuthUser string
-	BasicAuthHash string // bcrypt; empty means the endpoint is not basic-auth protected
+	BasicAuthHash string          // bcrypt; empty means the endpoint is not basic-auth protected
+	Notifications json.RawMessage // notify.FeedNotifications as JSON
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
 
 const feedColumns = "id, user_id, name, secret, sources, rules, ttl_seconds, " +
-	"basic_auth_user, basic_auth_hash, created_at, updated_at"
+	"basic_auth_user, basic_auth_hash, notifications, created_at, updated_at"
 
 // CreateFeed inserts a new feed.
 func (s *Store) CreateFeed(ctx context.Context, f *Feed) error {
@@ -47,9 +48,9 @@ func (s *Store) CreateFeed(ctx context.Context, f *Feed) error {
 		return err
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO feeds (`+feedColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO feeds (`+feedColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		f.ID, f.UserID, f.Name, f.Secret, sources, rulesOrEmpty(f.Rules), f.TTLSeconds,
-		f.BasicAuthUser, f.BasicAuthHash,
+		f.BasicAuthUser, f.BasicAuthHash, notifOrEmpty(f.Notifications),
 		f.CreatedAt.Format(time.RFC3339), f.UpdatedAt.Format(time.RFC3339),
 	)
 	if err != nil {
@@ -67,10 +68,10 @@ func (s *Store) UpdateFeed(ctx context.Context, f *Feed) error {
 	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE feeds SET name = ?, secret = ?, sources = ?, rules = ?, ttl_seconds = ?,
-		     basic_auth_user = ?, basic_auth_hash = ?, updated_at = ?
+		     basic_auth_user = ?, basic_auth_hash = ?, notifications = ?, updated_at = ?
 		 WHERE id = ? AND user_id = ?`,
 		f.Name, f.Secret, sources, rulesOrEmpty(f.Rules), f.TTLSeconds,
-		f.BasicAuthUser, f.BasicAuthHash, f.UpdatedAt.Format(time.RFC3339),
+		f.BasicAuthUser, f.BasicAuthHash, notifOrEmpty(f.Notifications), f.UpdatedAt.Format(time.RFC3339),
 		f.ID, f.UserID,
 	)
 	if err != nil {
@@ -119,6 +120,24 @@ func (s *Store) FeedsByUser(ctx context.Context, userID string) ([]*Feed, error)
 	}
 	defer func() { _ = rows.Close() }()
 
+	return scanFeeds(rows)
+}
+
+// AllFeeds returns every feed across all users, oldest first.
+func (s *Store) AllFeeds(ctx context.Context) ([]*Feed, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT "+feedColumns+" FROM feeds ORDER BY created_at")
+	if err != nil {
+		return nil, fmt.Errorf("query feeds: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanFeeds(rows)
+}
+
+func scanFeeds(rows interface {
+	Next() bool
+	Scan(...any) error
+	Err() error
+}) ([]*Feed, error) {
 	var feeds []*Feed
 	for rows.Next() {
 		f, err := scanFeed(rows)
@@ -132,12 +151,12 @@ func (s *Store) FeedsByUser(ctx context.Context, userID string) ([]*Feed, error)
 
 func scanFeed(sc rowScanner) (*Feed, error) {
 	var (
-		f                Feed
-		sources, rules   string
-		created, updated string
+		f                     Feed
+		sources, rules, notif string
+		created, updated      string
 	)
 	if err := sc.Scan(&f.ID, &f.UserID, &f.Name, &f.Secret, &sources, &rules, &f.TTLSeconds,
-		&f.BasicAuthUser, &f.BasicAuthHash, &created, &updated); err != nil {
+		&f.BasicAuthUser, &f.BasicAuthHash, &notif, &created, &updated); err != nil {
 		return nil, err
 	}
 	if sources != "" {
@@ -146,6 +165,7 @@ func scanFeed(sc rowScanner) (*Feed, error) {
 		}
 	}
 	f.Rules = json.RawMessage(rules)
+	f.Notifications = json.RawMessage(notif)
 	f.CreatedAt = parseTime(created)
 	f.UpdatedAt = parseTime(updated)
 	return &f, nil
@@ -165,6 +185,13 @@ func marshalSources(sources []FeedSource) (string, error) {
 func rulesOrEmpty(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return "[]"
+	}
+	return string(raw)
+}
+
+func notifOrEmpty(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return "{}"
 	}
 	return string(raw)
 }
