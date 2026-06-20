@@ -55,7 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sync jobs API (`/api/sync`, session-authenticated): list/create/get/update/delete plus a
   manual `POST /api/sync/{id}/run`. Passwords are write-only (preserved across updates,
   masked in responses). DAV clients use a request timeout so a hung server can't stall the
-  runner. (UI comes next.)
+  runner.
+- Web UI for DAV sync: jobs list with last-run status and a "Run now" action, plus a
+  create/edit form (type, direction, conflict policy, both endpoints with credentials,
+  interval, enabled). Adds a Sync nav link.
 
 ### Fixed
 

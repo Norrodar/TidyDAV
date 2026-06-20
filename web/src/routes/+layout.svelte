@@ -28,6 +28,7 @@
     <nav class="nav">
       {#if session.authenticated}
         <a href="/feeds">Feeds</a>
+        <a href="/sync">Sync</a>
         {#if session.user?.isAdmin}<a href="/audit">Audit</a>{/if}
         <button class="linklike" onclick={logout}>Sign out</button>
       {:else}

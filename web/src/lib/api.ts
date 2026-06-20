@@ -158,6 +158,45 @@ export interface AuditEntry {
   createdAt: string;
 }
 
+export type SyncKind = 'caldav' | 'carddav';
+export type SyncDirection = 'a-to-b' | 'b-to-a' | 'bidirectional';
+export type SyncConflict = 'newest-wins' | 'source-wins';
+
+export interface SyncJob {
+  id: string;
+  name: string;
+  kind: SyncKind;
+  direction: SyncDirection;
+  conflict: SyncConflict;
+  aUrl: string;
+  aUsername: string;
+  aPasswordSet: boolean;
+  bUrl: string;
+  bUsername: string;
+  bPasswordSet: boolean;
+  intervalSeconds: number;
+  enabled: boolean;
+  lastRunAt: string;
+  lastStatus: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SyncJobInput {
+  name: string;
+  kind: SyncKind;
+  direction: SyncDirection;
+  conflict: SyncConflict;
+  aUrl: string;
+  aUsername?: string;
+  aPassword?: string;
+  bUrl: string;
+  bUsername?: string;
+  bPassword?: string;
+  intervalSeconds: number;
+  enabled: boolean;
+}
+
 function jsonBody(method: string, body: unknown): RequestInit {
   return {
     method,
@@ -187,5 +226,14 @@ export const api = {
 
   audit: {
     list: () => request<AuditEntry[]>('/api/audit')
+  },
+
+  sync: {
+    list: () => request<SyncJob[]>('/api/sync'),
+    get: (id: string) => request<SyncJob>(`/api/sync/${id}`),
+    create: (input: SyncJobInput) => request<SyncJob>('/api/sync', jsonBody('POST', input)),
+    update: (id: string, input: SyncJobInput) => request<SyncJob>(`/api/sync/${id}`, jsonBody('PUT', input)),
+    remove: (id: string) => request<void>(`/api/sync/${id}`, { method: 'DELETE' }),
+    run: (id: string) => request<SyncJob>(`/api/sync/${id}/run`, { method: 'POST' })
   }
 };
