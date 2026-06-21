@@ -11,22 +11,32 @@
     type PreviewResult
   } from '$lib/api';
   import { toasts } from '$lib/state/toasts.svelte';
+  import { t, tf, lang } from '$lib/i18n';
+  import { weekStartDate, inWeek } from '$lib/week';
 
   let { feed }: { feed?: Feed } = $props();
-
-  // The editor is mounted with a fixed feed; capture its values once.
   const initial = untrack(() => feed);
+
+  type SourceRow = { url: string; username: string; password: string; useAuth: boolean };
 
   let name = $state(initial?.name ?? '');
   let ttlSeconds = $state(initial?.ttlSeconds ?? 900);
-  let sources = $state(
+  let sources = $state<SourceRow[]>(
     initial && initial.sources.length
-      ? initial.sources.map((s) => ({ url: s.url, username: s.username ?? '', password: '' }))
-      : [{ url: '', username: '', password: '' }]
+      ? initial.sources.map((s) => ({
+          url: s.url,
+          username: s.username ?? '',
+          password: '',
+          useAuth: !!(s.username || s.hasPassword)
+        }))
+      : [{ url: '', username: '', password: '', useAuth: false }]
   );
   let rules = $state<RuleConfig[]>(initial ? initial.rules.map((r) => ({ ...r })) : []);
   let basicAuthUser = $state(initial?.basicAuthUser ?? '');
   let basicAuthPassword = $state('');
+  let advancedEnabled = $state(
+    !!(initial && (initial.ttlSeconds !== 900 || initial.basicAuthUser || initial.basicAuthEnabled))
+  );
 
   let notifyWebhook = $state(initial?.notifications.webhookUrl ?? '');
   let notifyNtfyServer = $state(initial?.notifications.ntfyServer ?? '');
@@ -34,35 +44,61 @@
   let notifyGotifyServer = $state(initial?.notifications.gotifyServer ?? '');
   let notifyGotifyToken = $state('');
   let notifyTriggers = $state<string[]>(initial?.notifications.triggers ?? []);
+  let webhookEnabled = $state(!!initial?.notifications.webhookUrl);
+  let ntfyEnabled = $state(!!(initial?.notifications.ntfyServer || initial?.notifications.ntfyTopic));
+  let gotifyEnabled = $state(
+    !!(initial?.notifications.gotifyServer || initial?.notifications.gotifyTokenSet)
+  );
 
   let saving = $state(false);
   let previewing = $state(false);
   let error = $state<string | null>(null);
   let preview = $state<PreviewResult | null>(null);
+  let weekOffset = $state(0);
+  let panelOpen = $state(true);
 
   const ruleTypes: RuleType[] = ['filter', 'dedup', 'rename', 'strip', 'timezone', 'expire'];
 
+  // Known fields offered as click chips for each rule kind.
+  const dedupChips = ['SUMMARY', 'DATE', 'LOCATION', 'DESCRIPTION', 'CATEGORIES'];
+  const filterChips = ['SUMMARY', 'DESCRIPTION', 'LOCATION', 'CATEGORIES'];
+  const stripChips = ['DESCRIPTION', 'LOCATION', 'CATEGORIES', 'URL'];
+
+  function ruleLabel(type: RuleType): string {
+    return t(`rule_${type}`);
+  }
   function ruleHelp(type: RuleType): string {
-    switch (type) {
-      case 'filter':
-        return 'Keep or drop events whose chosen fields match the pattern.';
-      case 'dedup':
-        return 'Remove duplicate events sharing the same key fields (default: summary + date).';
-      case 'rename':
-        return 'Rewrite a text field by replacing matches ($1 references a regex group).';
-      case 'strip':
-        return 'Delete the listed fields from every event.';
-      case 'timezone':
-        return 'Convert event start/end times into the target timezone.';
-      case 'expire':
-        return 'Drop events that ended more than N days ago.';
+    return t(`help_${type}`);
+  }
+  function fieldLabel(f: string): string {
+    switch (f.toUpperCase()) {
+      case 'SUMMARY':
+        return t('field_summary');
+      case 'DESCRIPTION':
+        return t('field_description');
+      case 'LOCATION':
+        return t('field_location');
+      case 'CATEGORIES':
+        return t('field_categories');
+      case 'DATE':
+      case 'DTSTART':
+        return t('field_dtstart');
+      default:
+        return f;
     }
+  }
+
+  function isEnabled(rule: RuleConfig): boolean {
+    return rule.enabled !== false;
+  }
+  function toggleEnabled(rule: RuleConfig) {
+    rule.enabled = rule.enabled === false ? true : false;
   }
 
   function defaultRule(type: RuleType): RuleConfig {
     switch (type) {
       case 'filter':
-        return { type, filterMode: 'blacklist', matchMode: 'substring', pattern: '' };
+        return { type, filterMode: 'blacklist', matchMode: 'substring', pattern: '', fields: [] };
       case 'rename':
         return { type, field: 'SUMMARY', matchMode: 'substring', pattern: '', replacement: '' };
       case 'dedup':
@@ -77,7 +113,7 @@
   }
 
   function addSource() {
-    sources = [...sources, { url: '', username: '', password: '' }];
+    sources = [...sources, { url: '', username: '', password: '', useAuth: false }];
   }
   function removeSource(i: number) {
     sources = sources.filter((_, idx) => idx !== i);
@@ -94,54 +130,67 @@
 
   function toggleTrigger(type: string) {
     notifyTriggers = notifyTriggers.includes(type)
-      ? notifyTriggers.filter((t) => t !== type)
+      ? notifyTriggers.filter((x) => x !== type)
       : [...notifyTriggers, type];
   }
 
-  function csv(arr?: string[]): string {
-    return (arr ?? []).join(', ');
+  // Field chip / custom helpers operate on the stored fields/keyFields arrays.
+  function hasField(arr: string[] | undefined, f: string): boolean {
+    return (arr ?? []).some((x) => x.toUpperCase() === f.toUpperCase());
   }
-  function setCsv(rule: RuleConfig, key: 'fields' | 'keyFields', value: string) {
-    rule[key] = value
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+  function toggleField(rule: RuleConfig, key: 'fields' | 'keyFields', f: string) {
+    const cur = (rule[key] ?? []).slice();
+    const idx = cur.findIndex((x) => x.toUpperCase() === f.toUpperCase());
+    if (idx >= 0) cur.splice(idx, 1);
+    else cur.push(f);
+    rule[key] = cur;
+  }
+  function customFields(arr: string[] | undefined, known: string[]): string {
+    const up = known.map((k) => k.toUpperCase());
+    return (arr ?? []).filter((f) => !up.includes(f.toUpperCase())).join(', ');
+  }
+  function setCustomFields(rule: RuleConfig, key: 'fields' | 'keyFields', known: string[], value: string) {
+    const up = known.map((k) => k.toUpperCase());
+    const kept = (rule[key] ?? []).filter((f) => up.includes(f.toUpperCase()));
+    const customs = value.split(',').map((s) => s.trim()).filter(Boolean);
+    rule[key] = [...kept, ...customs];
   }
 
   function buildInput(): FeedInput {
     return {
       name,
-      ttlSeconds,
+      ttlSeconds: advancedEnabled ? ttlSeconds : 900,
       sources: sources
         .filter((s) => s.url.trim() !== '')
         .map((s) => ({
           url: s.url.trim(),
-          username: s.username || undefined,
-          password: s.password || undefined
+          username: s.useAuth ? s.username || undefined : undefined,
+          password: s.useAuth ? s.password || undefined : undefined
         })),
       rules,
-      basicAuthUser,
-      basicAuthPassword: basicAuthPassword || undefined,
+      basicAuthUser: advancedEnabled ? basicAuthUser : '',
+      basicAuthPassword: advancedEnabled ? basicAuthPassword || undefined : undefined,
       notifications: {
-        webhookUrl: notifyWebhook || undefined,
-        ntfyServer: notifyNtfyServer || undefined,
-        ntfyTopic: notifyNtfyTopic || undefined,
-        gotifyServer: notifyGotifyServer || undefined,
-        gotifyToken: notifyGotifyToken || undefined,
+        webhookUrl: webhookEnabled ? notifyWebhook || undefined : '',
+        ntfyServer: ntfyEnabled ? notifyNtfyServer || undefined : '',
+        ntfyTopic: ntfyEnabled ? notifyNtfyTopic || undefined : '',
+        gotifyServer: gotifyEnabled ? notifyGotifyServer || undefined : '',
+        gotifyToken: gotifyEnabled ? notifyGotifyToken || undefined : undefined,
         triggers: notifyTriggers
       }
     };
   }
 
-  // Returns a message for the first rule with an invalid regex, else null.
+  // Returns a message for the first enabled rule with an invalid regex, else null.
   function regexError(): string | null {
     for (let i = 0; i < rules.length; i++) {
       const r = rules[i];
+      if (!isEnabled(r)) continue;
       if ((r.type === 'filter' || r.type === 'rename') && r.matchMode === 'regex' && r.pattern) {
         try {
           new RegExp(r.pattern);
         } catch {
-          return `Rule ${i + 1}: invalid regular expression.`;
+          return `${ruleLabel(r.type)} #${i + 1}: invalid regular expression.`;
         }
       }
     }
@@ -159,10 +208,10 @@
     try {
       if (feed) await api.feeds.update(feed.id, buildInput());
       else await api.feeds.create(buildInput());
-      toasts.show(feed ? 'Feed saved' : 'Feed created');
+      toasts.show(feed ? t('calendar_saved') : t('calendar_created'));
       await goto('/feeds');
     } catch (e) {
-      error = e instanceof ApiError ? e.message : 'Save failed';
+      error = e instanceof ApiError ? e.message : t('save_failed');
     } finally {
       saving = false;
     }
@@ -176,260 +225,362 @@
     }
     previewing = true;
     error = null;
+    panelOpen = true;
     try {
       preview = await api.feeds.preview(buildInput(), feed?.id);
     } catch (e) {
-      error = e instanceof ApiError ? e.message : 'Preview failed';
+      error = e instanceof ApiError ? e.message : t('preview_failed');
     } finally {
       previewing = false;
     }
   }
+
+  // ── Week windowing for the preview ───────────────────────────────────────────
+  const currentWeekStart = $derived(weekStartDate(weekOffset));
+  function fmtWhen(iso: string): string {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? iso : d.toLocaleDateString(lang);
+  }
+  const weekOriginal = $derived(
+    (preview?.original ?? []).filter((e) => inWeek(e.start, currentWeekStart))
+  );
+  const weekTransformed = $derived(
+    (preview?.transformed ?? []).filter((e) => inWeek(e.start, currentWeekStart))
+  );
 </script>
 
-<form onsubmit={(e) => { e.preventDefault(); save(); }}>
-  <section class="card">
-    <label class="field">
-      <span>Name</span>
-      <input class="input" bind:value={name} placeholder="Waste collection" required />
-    </label>
-  </section>
+<div class="editor-layout">
+  <form onsubmit={(e) => { e.preventDefault(); save(); }}>
+    <section class="card">
+      <label class="field">
+        <span>{t('name')}</span>
+        <input class="input" bind:value={name} placeholder={t('name_placeholder')} required />
+      </label>
+    </section>
 
-  <section class="card">
-    <div class="section-head">
-      <h2>Sources</h2>
-      <button type="button" class="button button-secondary" onclick={addSource}>Add source</button>
-    </div>
-    {#each sources as source, i (i)}
-      <div class="row">
-        <input class="input grow" bind:value={source.url} placeholder="https://example.com/feed.ics" />
-        <input class="input" bind:value={source.username} placeholder="user (optional)" />
-        <input
-          class="input"
-          type="password"
-          bind:value={source.password}
-          autocomplete="new-password"
-          placeholder="password (optional)"
-        />
-        <button type="button" class="icon" onclick={() => removeSource(i)} aria-label="Remove">×</button>
+    <section class="card">
+      <div class="section-head">
+        <h2>{t('sources')}</h2>
+        <button type="button" class="button button-secondary" onclick={addSource}>{t('add_source')}</button>
       </div>
-    {/each}
-  </section>
-
-  <section class="card">
-    <div class="section-head">
-      <h2>Rules</h2>
-      <button type="button" class="button button-secondary" onclick={addRule}>Add rule</button>
-    </div>
-    {#if rules.length === 0}
-      <p class="muted">No rules — the merged feed is served as-is.</p>
-    {:else}
-      <p class="muted">Rules apply top to bottom.</p>
-    {/if}
-    {#each rules as rule, i (i)}
-      <div class="rule">
-        <div class="rule-head">
-          <span class="rule-num">{i + 1}</span>
-          <select
-            class="input"
-            value={rule.type}
-            onchange={(e) => changeRuleType(i, e.currentTarget.value as RuleType)}
-          >
-            {#each ruleTypes as rt}
-              <option value={rt}>{rt}</option>
-            {/each}
-          </select>
-          <button type="button" class="icon" onclick={() => removeRule(i)} aria-label="Remove">×</button>
+      {#each sources as source, i (i)}
+        <div class="source">
+          <div class="row">
+            <input class="input grow" bind:value={source.url} placeholder={t('source_url_placeholder')} />
+            <button type="button" class="icon" onclick={() => removeSource(i)} aria-label={t('remove')}>×</button>
+          </div>
+          <label class="check">
+            <input type="checkbox" bind:checked={source.useAuth} /> {t('use_credentials')}
+          </label>
+          <div class="row creds" class:disabled={!source.useAuth}>
+            <input
+              class="input grow"
+              bind:value={source.username}
+              disabled={!source.useAuth}
+              autocomplete="off"
+              placeholder={t('username')}
+            />
+            <input
+              class="input grow"
+              type="password"
+              bind:value={source.password}
+              disabled={!source.useAuth}
+              autocomplete="new-password"
+              placeholder={t('password')}
+            />
+          </div>
         </div>
-        <p class="rule-desc">{ruleHelp(rule.type)}</p>
+      {/each}
+    </section>
 
-        {#if rule.type === 'filter'}
-          <div class="rule-fields">
-            <select class="input" bind:value={rule.filterMode}>
-              <option value="blacklist">blacklist (remove matches)</option>
-              <option value="whitelist">whitelist (keep matches)</option>
+    <section class="card">
+      <div class="section-head">
+        <h2>{t('rules')}</h2>
+        <button type="button" class="button button-secondary" onclick={addRule}>{t('add_rule')}</button>
+      </div>
+      <p class="muted">{rules.length === 0 ? t('no_rules') : t('rules_apply_order')}</p>
+
+      {#each rules as rule, i (i)}
+        <div class="rule" class:off={!isEnabled(rule)}>
+          <div class="rule-head">
+            <span class="rule-num">{i + 1}</span>
+            <select
+              class="input"
+              value={rule.type}
+              onchange={(e) => changeRuleType(i, e.currentTarget.value as RuleType)}
+            >
+              {#each ruleTypes as rt}
+                <option value={rt}>{ruleLabel(rt)}</option>
+              {/each}
             </select>
-            <select class="input" bind:value={rule.matchMode}>
-              <option value="substring">substring</option>
-              <option value="regex">regex</option>
-            </select>
-            <input class="input grow" bind:value={rule.pattern} placeholder="pattern" />
-            <input
-              class="input grow"
-              value={csv(rule.fields)}
-              oninput={(e) => setCsv(rule, 'fields', e.currentTarget.value)}
-              placeholder="fields (default: SUMMARY, DESCRIPTION, LOCATION, CATEGORIES)"
-            />
-          </div>
-        {:else if rule.type === 'rename'}
-          <div class="rule-fields">
-            <select class="input" bind:value={rule.field}>
-              <option value="SUMMARY">SUMMARY</option>
-              <option value="DESCRIPTION">DESCRIPTION</option>
-              <option value="LOCATION">LOCATION</option>
-            </select>
-            <select class="input" bind:value={rule.matchMode}>
-              <option value="substring">substring</option>
-              <option value="regex">regex</option>
-            </select>
-            <input class="input grow" bind:value={rule.pattern} placeholder="pattern" />
-            <input class="input grow" bind:value={rule.replacement} placeholder="replacement ($1 in regex)" />
-          </div>
-        {:else if rule.type === 'dedup'}
-          <div class="rule-fields">
-            <input
-              class="input grow"
-              value={csv(rule.keyFields)}
-              oninput={(e) => setCsv(rule, 'keyFields', e.currentTarget.value)}
-              placeholder="key fields (default: SUMMARY, DATE)"
-            />
-          </div>
-        {:else if rule.type === 'strip'}
-          <div class="rule-fields">
-            <input
-              class="input grow"
-              value={csv(rule.fields)}
-              oninput={(e) => setCsv(rule, 'fields', e.currentTarget.value)}
-              placeholder="fields to remove, e.g. DESCRIPTION, LOCATION, URL"
-            />
-          </div>
-        {:else if rule.type === 'timezone'}
-          <div class="rule-fields">
-            <input class="input grow" bind:value={rule.target} placeholder="target, e.g. Europe/Berlin" />
-            <input class="input grow" bind:value={rule.defaultTz} placeholder="default for floating times (optional)" />
-          </div>
-        {:else if rule.type === 'expire'}
-          <div class="rule-fields">
-            <label class="inline">
-              Drop events older than
-              <input class="input narrow" type="number" min="1" bind:value={rule.days} /> days
+            <label class="toggle">
+              <input type="checkbox" checked={isEnabled(rule)} onchange={() => toggleEnabled(rule)} />
+              {t('rule_enabled')}
             </label>
+            <button type="button" class="icon" onclick={() => removeRule(i)} aria-label={t('remove')}>×</button>
           </div>
-        {/if}
+          <p class="rule-desc">{ruleHelp(rule.type)}</p>
+
+          {#if rule.type === 'filter'}
+            <div class="rule-fields">
+              <select class="input" bind:value={rule.filterMode}>
+                <option value="blacklist">{t('filter_blacklist')}</option>
+                <option value="whitelist">{t('filter_whitelist')}</option>
+              </select>
+              <select class="input" bind:value={rule.matchMode}>
+                <option value="substring">{t('match_substring')}</option>
+                <option value="regex">{t('match_regex')}</option>
+              </select>
+              <input class="input grow" bind:value={rule.pattern} placeholder={t('pattern')} />
+            </div>
+            <div class="chips-label">{t('fields_to_match')}</div>
+            <div class="chips">
+              {#each filterChips as f}
+                <button
+                  type="button"
+                  class="chip"
+                  class:on={hasField(rule.fields, f)}
+                  onclick={() => toggleField(rule, 'fields', f)}
+                >{fieldLabel(f)}</button>
+              {/each}
+            </div>
+            <input
+              class="input"
+              value={customFields(rule.fields, filterChips)}
+              oninput={(e) => setCustomFields(rule, 'fields', filterChips, e.currentTarget.value)}
+              placeholder={t('custom_fields')}
+            />
+          {:else if rule.type === 'rename'}
+            <div class="rule-fields">
+              <select class="input" bind:value={rule.field}>
+                <option value="SUMMARY">{t('field_summary')}</option>
+                <option value="DESCRIPTION">{t('field_description')}</option>
+                <option value="LOCATION">{t('field_location')}</option>
+              </select>
+              <select class="input" bind:value={rule.matchMode}>
+                <option value="substring">{t('match_substring')}</option>
+                <option value="regex">{t('match_regex')}</option>
+              </select>
+              <input class="input grow" bind:value={rule.pattern} placeholder={t('pattern')} />
+              <input class="input grow" bind:value={rule.replacement} placeholder={t('replacement')} />
+            </div>
+          {:else if rule.type === 'dedup'}
+            <div class="chips-label">{t('key_fields')}</div>
+            <div class="chips">
+              {#each dedupChips as f}
+                <button
+                  type="button"
+                  class="chip"
+                  class:on={hasField(rule.keyFields, f)}
+                  onclick={() => toggleField(rule, 'keyFields', f)}
+                >{fieldLabel(f)}</button>
+              {/each}
+            </div>
+            <input
+              class="input"
+              value={customFields(rule.keyFields, dedupChips)}
+              oninput={(e) => setCustomFields(rule, 'keyFields', dedupChips, e.currentTarget.value)}
+              placeholder={t('custom_fields')}
+            />
+          {:else if rule.type === 'strip'}
+            <div class="chips-label">{t('fields_to_strip')}</div>
+            <div class="chips">
+              {#each stripChips as f}
+                <button
+                  type="button"
+                  class="chip"
+                  class:on={hasField(rule.fields, f)}
+                  onclick={() => toggleField(rule, 'fields', f)}
+                >{fieldLabel(f)}</button>
+              {/each}
+            </div>
+            <input
+              class="input"
+              value={customFields(rule.fields, stripChips)}
+              oninput={(e) => setCustomFields(rule, 'fields', stripChips, e.currentTarget.value)}
+              placeholder={t('custom_fields')}
+            />
+          {:else if rule.type === 'timezone'}
+            <div class="rule-fields">
+              <input class="input grow" bind:value={rule.target} placeholder={t('target_timezone')} />
+              <input class="input grow" bind:value={rule.defaultTz} placeholder={t('default_timezone')} />
+            </div>
+          {:else if rule.type === 'expire'}
+            <label class="inline">
+              {t('drop_older_than')}
+              <input class="input narrow" type="number" min="1" bind:value={rule.days} /> {t('days')}
+            </label>
+          {/if}
+        </div>
+      {/each}
+    </section>
+
+    <section class="card">
+      <label class="check head-check">
+        <input type="checkbox" bind:checked={advancedEnabled} /> <h2>{t('advanced')}</h2>
+      </label>
+      {#if advancedEnabled}
+        <div class="row wrap">
+          <label class="field">
+            <span>{t('cache_ttl')}</span>
+            <input class="input narrow" type="number" min="0" bind:value={ttlSeconds} />
+          </label>
+          <label class="field grow">
+            <span>{t('basic_auth_user')}</span>
+            <input class="input" bind:value={basicAuthUser} placeholder={t('basic_auth_disable_hint')} />
+          </label>
+          <label class="field grow">
+            <span>{t('basic_auth_password')}</span>
+            <input
+              class="input"
+              type="password"
+              bind:value={basicAuthPassword}
+              autocomplete="new-password"
+              placeholder={feed?.basicAuthEnabled ? t('unchanged') : ''}
+            />
+          </label>
+        </div>
+      {/if}
+    </section>
+
+    <section class="card">
+      <h2>{t('notifications')}</h2>
+      <p class="muted">{t('notifications_desc')}</p>
+      <div class="triggers">
+        <span>{t('trigger_on')}</span>
+        <label>
+          <input type="checkbox" checked={notifyTriggers.includes('filter')} onchange={() => toggleTrigger('filter')} />
+          {t('rule_filter')}
+        </label>
+        <label>
+          <input type="checkbox" checked={notifyTriggers.includes('rename')} onchange={() => toggleTrigger('rename')} />
+          {t('rule_rename')}
+        </label>
       </div>
-    {/each}
-  </section>
 
-  <section class="card">
-    <h2>Advanced</h2>
-    <label class="field">
-      <span>Cache TTL (seconds)</span>
-      <input class="input narrow" type="number" min="0" bind:value={ttlSeconds} />
-    </label>
-    <div class="row">
-      <label class="field grow">
-        <span>Basic auth user (optional)</span>
-        <input class="input" bind:value={basicAuthUser} placeholder="leave empty to disable" />
-      </label>
-      <label class="field grow">
-        <span>Basic auth password</span>
-        <input
-          class="input"
-          type="password"
-          bind:value={basicAuthPassword}
-          autocomplete="new-password"
-          placeholder={feed?.basicAuthEnabled ? 'unchanged' : ''}
-        />
-      </label>
+      <label class="check"><input type="checkbox" bind:checked={webhookEnabled} /> {t('enable_webhook')}</label>
+      {#if webhookEnabled}
+        <label class="field">
+          <span>{t('webhook_url')}</span>
+          <input class="input" bind:value={notifyWebhook} placeholder="https://…" />
+        </label>
+      {/if}
+
+      <label class="check"><input type="checkbox" bind:checked={ntfyEnabled} /> {t('enable_ntfy')}</label>
+      {#if ntfyEnabled}
+        <div class="row wrap">
+          <label class="field grow">
+            <span>{t('ntfy_server')}</span>
+            <input class="input" bind:value={notifyNtfyServer} placeholder="https://ntfy.sh" />
+          </label>
+          <label class="field grow">
+            <span>{t('ntfy_topic')}</span>
+            <input class="input" bind:value={notifyNtfyTopic} />
+          </label>
+        </div>
+      {/if}
+
+      <label class="check"><input type="checkbox" bind:checked={gotifyEnabled} /> {t('enable_gotify')}</label>
+      {#if gotifyEnabled}
+        <div class="row wrap">
+          <label class="field grow">
+            <span>{t('gotify_server')}</span>
+            <input class="input" bind:value={notifyGotifyServer} placeholder="https://gotify.example.com" />
+          </label>
+          <label class="field grow">
+            <span>{t('gotify_token')}</span>
+            <input
+              class="input"
+              type="password"
+              bind:value={notifyGotifyToken}
+              autocomplete="new-password"
+              placeholder={initial?.notifications.gotifyTokenSet ? t('unchanged') : ''}
+            />
+          </label>
+        </div>
+      {/if}
+    </section>
+
+    {#if error}<p class="error">{error}</p>{/if}
+
+    <div class="actions">
+      <button type="button" class="button button-secondary" onclick={runPreview} disabled={previewing}>
+        {previewing ? t('previewing') : t('load_preview_week')}
+      </button>
+      <button type="submit" class="button" disabled={saving}>
+        {saving ? t('saving') : feed ? t('save_changes') : t('create_calendar')}
+      </button>
+      <a class="button button-secondary" href="/feeds">{t('cancel')}</a>
     </div>
-  </section>
+  </form>
 
-  <section class="card">
-    <h2>Notifications</h2>
-    <p class="muted">
-      Fire a notification when matching rules trigger. Checked on a schedule (not on every
-      calendar refresh), and each matched event notifies only once.
-    </p>
-    <div class="triggers">
-      <span>Trigger on:</span>
-      <label>
-        <input
-          type="checkbox"
-          checked={notifyTriggers.includes('filter')}
-          onchange={() => toggleTrigger('filter')}
-        /> filter
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={notifyTriggers.includes('rename')}
-          onchange={() => toggleTrigger('rename')}
-        /> rename
-      </label>
-    </div>
-    <label class="field">
-      <span>Webhook URL</span>
-      <input class="input" bind:value={notifyWebhook} placeholder="https://… (HTTP POST JSON)" />
-    </label>
-    <div class="row">
-      <label class="field grow">
-        <span>ntfy server</span>
-        <input class="input" bind:value={notifyNtfyServer} placeholder="https://ntfy.sh" />
-      </label>
-      <label class="field grow">
-        <span>ntfy topic</span>
-        <input class="input" bind:value={notifyNtfyTopic} />
-      </label>
-    </div>
-    <div class="row">
-      <label class="field grow">
-        <span>Gotify server</span>
-        <input class="input" bind:value={notifyGotifyServer} placeholder="https://gotify.example.com" />
-      </label>
-      <label class="field grow">
-        <span>Gotify token</span>
-        <input
-          class="input"
-          type="password"
-          bind:value={notifyGotifyToken}
-          autocomplete="new-password"
-          placeholder={initial?.notifications.gotifyTokenSet ? 'unchanged' : ''}
-        />
-      </label>
-    </div>
-  </section>
-
-  {#if error}<p class="error">{error}</p>{/if}
-
-  <div class="actions">
-    <button type="button" class="button button-secondary" onclick={runPreview} disabled={previewing}>
-      {previewing ? 'Previewing…' : 'Preview'}
-    </button>
-    <button type="submit" class="button" disabled={saving}>
-      {saving ? 'Saving…' : feed ? 'Save changes' : 'Create feed'}
-    </button>
-    <a class="button button-secondary" href="/feeds">Cancel</a>
-  </div>
-</form>
-
-{#if preview}
-  <section class="card preview">
-    <h2>Preview</h2>
-    <div class="diff">
-      <div>
-        <h3>Original <span class="badge">{preview.original.length}</span></h3>
-        <ul>
-          {#each preview.original as e (e.uid + e.start)}
-            <li><span class="when">{e.start || '—'}</span> {e.summary}</li>
-          {/each}
-        </ul>
+  {#if preview}
+    <aside class="preview-panel" class:collapsed={!panelOpen}>
+      <div class="panel-head">
+        <h2>{t('preview')}</h2>
+        <button type="button" class="linklike" onclick={() => (panelOpen = !panelOpen)}>
+          {panelOpen ? t('hide_preview') : t('show_preview')}
+        </button>
       </div>
-      <div>
-        <h3>Transformed <span class="badge badge-ok">{preview.transformed.length}</span></h3>
-        <ul>
-          {#each preview.transformed as e (e.uid + e.start)}
-            <li><span class="when">{e.start || '—'}</span> {e.summary}</li>
-          {/each}
-        </ul>
-      </div>
-    </div>
-  </section>
-{/if}
+      {#if panelOpen}
+        <div class="week-nav">
+          <button type="button" class="button button-secondary button-sm" onclick={() => weekOffset--}>‹ {t('prev_week')}</button>
+          <span class="week-label">{tf('this_week', { date: currentWeekStart.toLocaleDateString(lang) })}</span>
+          <button type="button" class="button button-secondary button-sm" onclick={() => weekOffset++}>{t('next_week')} ›</button>
+        </div>
+        <button type="button" class="button button-secondary button-sm refresh" onclick={runPreview} disabled={previewing}>
+          {previewing ? t('previewing') : t('refresh_preview')}
+        </button>
+
+        <div class="diff">
+          <div>
+            <h3>{t('original')} <span class="badge">{weekOriginal.length}</span></h3>
+            {#if weekOriginal.length === 0}
+              <p class="muted">{t('no_events_week')}</p>
+            {:else}
+              <ul>
+                {#each weekOriginal as e, i (i)}
+                  <li><span class="when">{fmtWhen(e.start)}</span> {e.summary}</li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+          <div>
+            <h3>{t('transformed')} <span class="badge badge-ok">{weekTransformed.length}</span></h3>
+            {#if weekTransformed.length === 0}
+              <p class="muted">{t('no_events_week')}</p>
+            {:else}
+              <ul>
+                {#each weekTransformed as e, i (i)}
+                  <li><span class="when">{fmtWhen(e.start)}</span> {e.summary}</li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        </div>
+      {/if}
+    </aside>
+  {/if}
+</div>
 
 <style>
+  .editor-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+    gap: var(--space-5);
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .editor-layout {
+      grid-template-columns: 1fr;
+    }
+  }
   form {
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+    min-width: 0;
   }
   .card {
     display: flex;
@@ -462,12 +613,37 @@
     gap: var(--space-2);
     align-items: center;
   }
+  .row.wrap {
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
   .grow {
     flex: 1;
     min-width: 0;
   }
   .narrow {
     width: 120px;
+  }
+  .source {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--separator);
+    border-radius: var(--radius-md);
+  }
+  .creds.disabled {
+    opacity: 0.45;
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+  .head-check h2 {
+    font-weight: var(--weight-semibold);
   }
   .rule {
     border: 1px solid var(--separator);
@@ -477,10 +653,14 @@
     flex-direction: column;
     gap: var(--space-3);
   }
+  .rule.off {
+    opacity: 0.5;
+  }
   .rule-head {
     display: flex;
     gap: var(--space-2);
     align-items: center;
+    flex-wrap: wrap;
   }
   .rule-num {
     flex-shrink: 0;
@@ -494,18 +674,50 @@
     font-size: var(--text-xs);
     font-weight: var(--weight-medium);
   }
+  .rule-head select {
+    width: 160px;
+  }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    margin-left: auto;
+  }
   .rule-desc {
     margin: 0;
     color: var(--text-tertiary);
     font-size: var(--text-xs);
   }
-  .rule-head select {
-    width: 160px;
-  }
   .rule-fields {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
+  }
+  .chips-label {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .chip {
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-full);
+    border: 1px solid var(--separator);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+  }
+  .chip.on {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
   }
   .inline {
     display: flex;
@@ -524,6 +736,7 @@
     cursor: pointer;
     font-size: var(--text-lg);
     line-height: 1;
+    flex-shrink: 0;
   }
   .icon:hover {
     color: var(--danger);
@@ -533,6 +746,7 @@
     display: flex;
     gap: var(--space-3);
     align-items: center;
+    flex-wrap: wrap;
   }
   .muted {
     color: var(--text-tertiary);
@@ -545,6 +759,7 @@
     gap: var(--space-4);
     font-size: var(--text-sm);
     color: var(--text-secondary);
+    flex-wrap: wrap;
   }
   .triggers label {
     display: flex;
@@ -555,13 +770,57 @@
     color: var(--danger);
     font-size: var(--text-sm);
   }
-  .preview {
-    margin-top: var(--space-4);
+  .linklike {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: var(--text-sm);
+  }
+  .button-sm {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-sm);
+  }
+
+  /* Preview panel */
+  .preview-panel {
+    position: sticky;
+    top: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 1px solid var(--separator);
+    border-radius: var(--radius-lg);
+    background: var(--bg-elevated);
+    max-height: calc(100vh - 2 * var(--space-5));
+    overflow: auto;
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .week-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  .week-label {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    text-align: center;
+    flex: 1;
+  }
+  .refresh {
+    align-self: flex-start;
   }
   .diff {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
   }
   ul {
     list-style: none;

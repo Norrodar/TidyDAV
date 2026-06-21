@@ -47,6 +47,7 @@ func syncOneWay(ctx context.Context, src, dst Collection, state *State, opts Opt
 	}
 
 	seen := make(map[string]bool, len(srcList))
+	filtered := make(map[string]bool) // out-of-window UIDs: skipped, protected from deletion
 	for _, meta := range srcList {
 		if st, ok := stateBySrcHref[meta.Href]; ok && st.SrcETag == meta.ETag {
 			seen[st.UID] = true // unchanged, no fetch needed
@@ -60,6 +61,10 @@ func syncOneWay(ctx context.Context, src, dst Collection, state *State, opts Opt
 		uid := uidFn(item.Data)
 		if uid == "" {
 			uid = meta.Href
+		}
+		if !opts.inWindow(item.Data) {
+			filtered[uid] = true // outside the date window: don't sync, don't delete
+			continue
 		}
 		seen[uid] = true
 
@@ -88,7 +93,7 @@ func syncOneWay(ctx context.Context, src, dst Collection, state *State, opts Opt
 
 	// Propagate deletions: state entries whose source item disappeared.
 	for uid, st := range state.Items {
-		if seen[uid] {
+		if seen[uid] || filtered[uid] {
 			continue
 		}
 		if st.DstHref != "" {

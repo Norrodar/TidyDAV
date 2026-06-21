@@ -27,9 +27,13 @@ type SyncJob struct {
 
 	IntervalSeconds int
 	Enabled         bool
-	State           json.RawMessage
-	LastRunAt       time.Time
-	LastStatus      string
+	// WindowStart/WindowEnd bound the CalDAV sync date window (RFC3339 date,
+	// empty = unbounded). Ignored for CardDAV.
+	WindowStart string
+	WindowEnd   string
+	State       json.RawMessage
+	LastRunAt   time.Time
+	LastStatus  string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -37,7 +41,7 @@ type SyncJob struct {
 
 const syncJobColumns = "id, user_id, name, kind, direction, conflict, " +
 	"a_url, a_username, a_password, b_url, b_username, b_password, " +
-	"interval_seconds, enabled, state, last_run_at, last_status, created_at, updated_at"
+	"interval_seconds, enabled, window_start, window_end, state, last_run_at, last_status, created_at, updated_at"
 
 // CreateSyncJob inserts a new sync job.
 func (s *Store) CreateSyncJob(ctx context.Context, j *SyncJob) error {
@@ -47,10 +51,10 @@ func (s *Store) CreateSyncJob(ctx context.Context, j *SyncJob) error {
 	}
 	j.UpdatedAt = now
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO sync_jobs (`+syncJobColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO sync_jobs (`+syncJobColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		j.ID, j.UserID, j.Name, j.Kind, j.Direction, j.Conflict,
 		j.AURL, j.AUsername, j.APassword, j.BURL, j.BUsername, j.BPassword,
-		j.IntervalSeconds, boolToInt(j.Enabled), notifOrEmpty(j.State),
+		j.IntervalSeconds, boolToInt(j.Enabled), j.WindowStart, j.WindowEnd, notifOrEmpty(j.State),
 		formatTime(j.LastRunAt), j.LastStatus,
 		j.CreatedAt.Format(time.RFC3339), j.UpdatedAt.Format(time.RFC3339),
 	)
@@ -67,11 +71,11 @@ func (s *Store) UpdateSyncJob(ctx context.Context, j *SyncJob) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE sync_jobs SET name = ?, kind = ?, direction = ?, conflict = ?,
 		     a_url = ?, a_username = ?, a_password = ?, b_url = ?, b_username = ?, b_password = ?,
-		     interval_seconds = ?, enabled = ?, updated_at = ?
+		     interval_seconds = ?, enabled = ?, window_start = ?, window_end = ?, updated_at = ?
 		 WHERE id = ? AND user_id = ?`,
 		j.Name, j.Kind, j.Direction, j.Conflict,
 		j.AURL, j.AUsername, j.APassword, j.BURL, j.BUsername, j.BPassword,
-		j.IntervalSeconds, boolToInt(j.Enabled), j.UpdatedAt.Format(time.RFC3339),
+		j.IntervalSeconds, boolToInt(j.Enabled), j.WindowStart, j.WindowEnd, j.UpdatedAt.Format(time.RFC3339),
 		j.ID, j.UserID,
 	)
 	if err != nil {
@@ -157,7 +161,7 @@ func scanSyncJob(sc rowScanner) (*SyncJob, error) {
 	)
 	if err := sc.Scan(&j.ID, &j.UserID, &j.Name, &j.Kind, &j.Direction, &j.Conflict,
 		&j.AURL, &j.AUsername, &j.APassword, &j.BURL, &j.BUsername, &j.BPassword,
-		&j.IntervalSeconds, &enabled, &state, &lastRun, &j.LastStatus, &created, &updated); err != nil {
+		&j.IntervalSeconds, &enabled, &j.WindowStart, &j.WindowEnd, &state, &lastRun, &j.LastStatus, &created, &updated); err != nil {
 		return nil, err
 	}
 	j.Enabled = enabled != 0

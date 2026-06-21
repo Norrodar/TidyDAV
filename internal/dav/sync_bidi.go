@@ -20,7 +20,9 @@ type sideItem struct {
 
 // resolveSide lists a collection and resolves each item to a UID, fetching the
 // body only for items that are new or whose ETag changed since the last sync.
-func resolveSide(ctx context.Context, coll Collection, list []ItemMeta, known map[string]hrefState, uidFn func([]byte) string) (map[string]sideItem, error) {
+// New/changed items outside the date window are recorded in filtered (and left
+// out of the result) so they are neither propagated nor deleted.
+func resolveSide(ctx context.Context, coll Collection, list []ItemMeta, known map[string]hrefState, opts Options, filtered map[string]bool) (map[string]sideItem, error) {
 	out := make(map[string]sideItem, len(list))
 	for _, meta := range list {
 		if ks, ok := known[meta.Href]; ok && ks.etag == meta.ETag {
@@ -31,9 +33,13 @@ func resolveSide(ctx context.Context, coll Collection, list []ItemMeta, known ma
 		if err != nil {
 			return nil, fmt.Errorf("get %s: %w", meta.Href, err)
 		}
-		uid := uidFn(item.Data)
+		uid := opts.UID(item.Data)
 		if uid == "" {
 			uid = meta.Href
+		}
+		if !opts.inWindow(item.Data) {
+			filtered[uid] = true
+			continue
 		}
 		out[uid] = sideItem{href: meta.Href, etag: meta.ETag, uid: uid, changed: true, data: item.Data}
 	}
@@ -107,11 +113,12 @@ func syncBidirectional(ctx context.Context, a, b Collection, state *State, opts 
 	if err != nil {
 		return res, fmt.Errorf("list B: %w", err)
 	}
-	aSide, err := resolveSide(ctx, a, aList, aKnown, opts.UID)
+	filtered := make(map[string]bool) // out-of-window UIDs: skipped, protected from deletion
+	aSide, err := resolveSide(ctx, a, aList, aKnown, opts, filtered)
 	if err != nil {
 		return res, err
 	}
-	bSide, err := resolveSide(ctx, b, bList, bKnown, opts.UID)
+	bSide, err := resolveSide(ctx, b, bList, bKnown, opts, filtered)
 	if err != nil {
 		return res, err
 	}
@@ -128,6 +135,9 @@ func syncBidirectional(ctx context.Context, a, b Collection, state *State, opts 
 	}
 
 	for uid := range uids {
+		if filtered[uid] {
+			continue // outside the date window
+		}
 		ai, aOK := aSide[uid]
 		bi, bOK := bSide[uid]
 		st, stOK := state.Items[uid]

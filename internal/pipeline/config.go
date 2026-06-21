@@ -17,6 +17,10 @@ const (
 type RuleConfig struct {
 	Type string `json:"type"`
 
+	// Enabled gates whether the rule runs. A nil pointer means enabled (so
+	// configs written before this field existed keep working).
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// Matching (filter, rename).
 	MatchMode string `json:"matchMode,omitempty"` // "substring" | "regex"
 	Pattern   string `json:"pattern,omitempty"`
@@ -64,6 +68,9 @@ func BuildRule(c RuleConfig) (Rule, error) {
 func BuildPipeline(configs []RuleConfig) (*Pipeline, error) {
 	rules := make([]Rule, 0, len(configs))
 	for i, c := range configs {
+		if c.Enabled != nil && !*c.Enabled {
+			continue // rule explicitly disabled
+		}
 		r, err := BuildRule(c)
 		if err != nil {
 			return nil, fmt.Errorf("pipeline: rule %d: %w", i, err)

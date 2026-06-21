@@ -1,8 +1,9 @@
 <script lang="ts">
   import SyncJobEditor from '$lib/components/SyncJobEditor.svelte';
+  import { t } from '$lib/i18n';
 </script>
 
-<h1>New sync job</h1>
+<h1>{t('new_sync_heading')}</h1>
 <SyncJobEditor />
 
 <style>

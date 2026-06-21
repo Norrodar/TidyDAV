@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { api, ApiError, type Feed } from '$lib/api';
   import FeedEditor from '$lib/components/FeedEditor.svelte';
+  import { t } from '$lib/i18n';
 
   let feed = $state<Feed | null>(null);
   let error = $state<string | null>(null);
@@ -26,13 +27,13 @@
   });
 </script>
 
-<h1>Edit feed</h1>
+<h1>{t('edit_calendar')}</h1>
 {#if error}
   <p class="error">{error}</p>
 {:else if feed}
   <FeedEditor {feed} />
 {:else}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('loading')}</p>
 {/if}
 
 <style>

@@ -113,6 +113,9 @@ func buildSync(job *store.SyncJob) (dav.Collection, dav.Collection, dav.Options,
 	switch job.Kind {
 	case "caldav":
 		opts.UID, opts.Modified, opts.HrefSuffix = dav.CalendarUID, dav.CalendarModified, ".ics"
+		if opts.WindowStart, opts.WindowEnd, err = dav.ParseWindow(job.WindowStart, job.WindowEnd); err != nil {
+			return nil, nil, opts, err
+		}
 		if a, err = dav.NewCalDAVCollection(job.AURL, job.AUsername, job.APassword); err != nil {
 			return nil, nil, opts, err
 		}

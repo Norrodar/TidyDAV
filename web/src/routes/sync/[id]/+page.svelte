@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { api, ApiError, type SyncJob } from '$lib/api';
   import SyncJobEditor from '$lib/components/SyncJobEditor.svelte';
+  import { t } from '$lib/i18n';
 
   let job = $state<SyncJob | null>(null);
   let error = $state<string | null>(null);
@@ -26,13 +27,13 @@
   });
 </script>
 
-<h1>Edit sync job</h1>
+<h1>{t('edit_sync_job')}</h1>
 {#if error}
   <p class="error">{error}</p>
 {:else if job}
   <SyncJobEditor {job} />
 {:else}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('loading')}</p>
 {/if}
 
 <style>

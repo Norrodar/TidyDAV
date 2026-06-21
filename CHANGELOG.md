@@ -65,6 +65,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whether an email exists. The session payload exposes `mailEnabled`.
 - Web UI for password reset: request and confirm pages, plus a "Forgot password?" link on
   the sign-in page (shown when SMTP is configured).
+- Per-rule enable/disable: `pipeline.RuleConfig` gains an optional `enabled` flag; disabled
+  rules are skipped when building the pipeline (omitted = enabled, backward compatible).
+- Optional CalDAV sync date window (`window_start`/`window_end` on sync jobs, migration
+  `009`): only events whose start falls in the range are synced; out-of-window items are
+  neither propagated nor deleted (`dav.Options.WindowStart/WindowEnd`, `dav.ParseWindow`,
+  `dav.EventInWindow`).
+- Sync merge preview (`POST /api/sync/preview`, `internal/dav/preview.go`): fetches a
+  date-windowed snapshot of both servers and returns each side plus the simulated merge for
+  the chosen direction, without writing to either server.
+- Redesigned calendar (ex "Feeds") editor: full-width source URL with an opt-in
+  username/password toggle, per-rule enable switch and click-to-pick field chips for
+  filter/dedup/strip, an explicitly-enabled Advanced section, per-channel notification
+  toggles, and a sticky, week-navigable live preview panel.
+- Redesigned sync editor: a direction toggle button between the Server A/B cards
+  (→ / ← / ⇄), an "enable" switch that gates the interval with a live status line, an
+  optional date range, and a three-column A/B/result merge preview.
+- Internationalised UI (English + German, auto-detected from the browser) across the
+  calendars and sync pages; the "Feeds" area is now labelled "Calendars"/"Kalender".
 
 ### Fixed
 
@@ -99,6 +117,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a toast system: feed/sync create, save, delete and run actions now show a brief
   success (or error) confirmation. The rule editor shows per-rule descriptions, order
   numbers and an "apply top to bottom" hint.
+- The calendar preview no longer fails to render for feeds whose events have no `UID`
+  (e.g. municipal waste calendars): the preview list is keyed by index instead of
+  `uid + start`, which previously collided across identical undated events.
 
 ### Known limitations
 

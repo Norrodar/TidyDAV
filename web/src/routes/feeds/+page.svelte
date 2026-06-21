@@ -4,6 +4,7 @@
   import { api, ApiError, type Feed } from '$lib/api';
   import { toasts } from '$lib/state/toasts.svelte';
   import { confirmDialog } from '$lib/state/confirm.svelte';
+  import { t, tf } from '$lib/i18n';
 
   let feeds = $state<Feed[]>([]);
   let loading = $state(true);
@@ -29,13 +30,13 @@
   onMount(load);
 
   async function remove(feed: Feed) {
-    if (!(await confirmDialog.ask(`Delete feed “${feed.name}”?`, 'Delete'))) return;
+    if (!(await confirmDialog.ask(tf('delete_calendar_confirm', { name: feed.name }), t('delete')))) return;
     try {
       await api.feeds.remove(feed.id);
       feeds = feeds.filter((f) => f.id !== feed.id);
-      toasts.show('Feed deleted');
+      toasts.show(t('calendar_deleted'));
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Delete failed';
+      error = e instanceof Error ? e.message : t('delete_failed');
     }
   }
 
@@ -55,18 +56,18 @@
 </script>
 
 <div class="head">
-  <h1>Feeds</h1>
-  <a class="button" href="/feeds/new">New feed</a>
+  <h1>{t('calendars_title')}</h1>
+  <a class="button" href="/feeds/new">{t('new_calendar')}</a>
 </div>
 
 {#if loading}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('loading')}</p>
 {:else if error}
   <p class="error">{error}</p>
 {:else if feeds.length === 0}
   <div class="card empty">
-    <p>No feeds yet.</p>
-    <a class="button" href="/feeds/new">Create your first feed</a>
+    <p>{t('no_calendars')}</p>
+    <a class="button" href="/feeds/new">{t('create_first_calendar')}</a>
   </div>
 {:else}
   <div class="list">
@@ -76,20 +77,20 @@
           <h2>{feed.name}</h2>
           <code class="url">{feed.icsUrl}</code>
           {#if feed.basicAuthEnabled}
-            <p class="auth-hint">Requires HTTP Basic Auth in your calendar client.</p>
+            <p class="auth-hint">{t('basic_auth_hint')}</p>
           {/if}
         </div>
         <div class="meta">
-          <span class="badge">{feed.sources.length} source{feed.sources.length === 1 ? '' : 's'}</span>
-          <span class="badge">{feed.rules.length} rule{feed.rules.length === 1 ? '' : 's'}</span>
-          {#if feed.basicAuthEnabled}<span class="badge">basic auth</span>{/if}
+          <span class="badge">{tf('source_count', { n: feed.sources.length })}</span>
+          <span class="badge">{tf('rule_count', { n: feed.rules.length })}</span>
+          {#if feed.basicAuthEnabled}<span class="badge">{t('basic_auth_badge')}</span>{/if}
         </div>
         <div class="row-actions">
           <button class="button button-secondary" onclick={() => copy(feed.icsUrl)}>
-            {copied === feed.icsUrl ? 'Copied!' : 'Copy URL'}
+            {copied === feed.icsUrl ? t('copied') : t('copy_url')}
           </button>
-          <a class="button button-secondary" href={`/feeds/${feed.id}`}>Edit</a>
-          <button class="button button-secondary danger" onclick={() => remove(feed)}>Delete</button>
+          <a class="button button-secondary" href={`/feeds/${feed.id}`}>{t('edit')}</a>
+          <button class="button button-secondary danger" onclick={() => remove(feed)}>{t('delete')}</button>
         </div>
       </div>
     {/each}

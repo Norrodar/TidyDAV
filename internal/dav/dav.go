@@ -81,6 +81,11 @@ type Options struct {
 	// HrefSuffix is appended to generated destination hrefs (".ics" for CalDAV,
 	// ".vcf" for CardDAV). Defaults to ".ics".
 	HrefSuffix string
+	// WindowStart/WindowEnd optionally bound the sync to items whose start lies
+	// within the range (CalDAV only). Zero bounds mean unbounded. Items outside
+	// the window are neither propagated nor deleted.
+	WindowStart time.Time
+	WindowEnd   time.Time
 }
 
 func (o Options) suffix() string {
@@ -88,6 +93,20 @@ func (o Options) suffix() string {
 		return ".ics"
 	}
 	return o.HrefSuffix
+}
+
+// hasWindow reports whether a date window is configured.
+func (o Options) hasWindow() bool {
+	return !o.WindowStart.IsZero() || !o.WindowEnd.IsZero()
+}
+
+// inWindow reports whether an item body falls inside the configured window. With
+// no window configured every item is in-window.
+func (o Options) inWindow(data []byte) bool {
+	if !o.hasWindow() {
+		return true
+	}
+	return EventInWindow(data, o.WindowStart, o.WindowEnd)
 }
 
 // Result counts what a sync run changed on the destination side(s).

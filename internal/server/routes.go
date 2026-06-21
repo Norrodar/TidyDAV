@@ -23,6 +23,7 @@ func (s *Server) routes(mux *http.ServeMux) error {
 
 	mux.HandleFunc("GET /api/sync", s.handleListSyncJobs)
 	mux.HandleFunc("POST /api/sync", s.handleCreateSyncJob)
+	mux.HandleFunc("POST /api/sync/preview", s.handleSyncPreview)
 	mux.HandleFunc("POST /api/sync/{id}/run", s.handleRunSyncJob)
 	mux.HandleFunc("GET /api/sync/{id}", s.handleGetSyncJob)
 	mux.HandleFunc("PUT /api/sync/{id}", s.handleUpdateSyncJob)

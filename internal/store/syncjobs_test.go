@@ -17,6 +17,7 @@ func TestSyncJobCRUD(t *testing.T) {
 		Direction: "a-to-b", Conflict: "newest-wins",
 		AURL: "https://a/cal", BURL: "https://b/cal",
 		IntervalSeconds: 900, Enabled: true,
+		WindowStart: "2026-01-01", WindowEnd: "2026-12-31",
 	}
 	if err := st.CreateSyncJob(ctx, j); err != nil {
 		t.Fatalf("CreateSyncJob: %v", err)
@@ -28,6 +29,18 @@ func TestSyncJobCRUD(t *testing.T) {
 	}
 	if got.Name != "Cal" || got.Kind != "caldav" || !got.Enabled || got.AURL != "https://a/cal" {
 		t.Errorf("unexpected job: %+v", got)
+	}
+	if got.WindowStart != "2026-01-01" || got.WindowEnd != "2026-12-31" {
+		t.Errorf("window not persisted: start=%q end=%q", got.WindowStart, got.WindowEnd)
+	}
+
+	// Window survives a config update.
+	j.WindowEnd = "2027-06-30"
+	if err := st.UpdateSyncJob(ctx, j); err != nil {
+		t.Fatalf("UpdateSyncJob: %v", err)
+	}
+	if got, _ = st.SyncJobByID(ctx, "job-1"); got.WindowEnd != "2027-06-30" {
+		t.Errorf("window end after update = %q, want 2027-06-30", got.WindowEnd)
 	}
 
 	if list, _ := st.SyncJobsByUser(ctx, "owner"); len(list) != 1 {

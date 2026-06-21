@@ -27,6 +27,27 @@ func TestBuildPipelineFromJSON(t *testing.T) {
 	}
 }
 
+func TestBuildPipelineSkipsDisabledRules(t *testing.T) {
+	// The middle rule is disabled; nil/true ones run. A disabled rule with an
+	// otherwise-invalid config must not cause an error (it is skipped entirely).
+	raw := `[
+		{"type":"strip","fields":["DESCRIPTION"]},
+		{"type":"strip","enabled":false},
+		{"type":"expire","days":30,"enabled":true}
+	]`
+	var configs []RuleConfig
+	if err := json.Unmarshal([]byte(raw), &configs); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	p, err := BuildPipeline(configs)
+	if err != nil {
+		t.Fatalf("BuildPipeline: %v", err)
+	}
+	if p.Len() != 2 {
+		t.Fatalf("pipeline length = %d, want 2 (disabled rule skipped)", p.Len())
+	}
+}
+
 func TestBuildRuleErrors(t *testing.T) {
 	tests := []struct {
 		name string

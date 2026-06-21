@@ -4,6 +4,7 @@
   import { api, ApiError, type SyncJob } from '$lib/api';
   import { toasts } from '$lib/state/toasts.svelte';
   import { confirmDialog } from '$lib/state/confirm.svelte';
+  import { t, tf, lang } from '$lib/i18n';
 
   let jobs = $state<SyncJob[]>([]);
   let loading = $state(true);
@@ -34,18 +35,18 @@
       const updated = await api.sync.run(job.id);
       jobs = jobs.map((j) => (j.id === updated.id ? updated : j));
       const ok = updated.lastStatus.startsWith('ok');
-      toasts.show(ok ? 'Sync complete' : `Sync: ${updated.lastStatus}`, ok ? 'success' : 'error');
+      toasts.show(ok ? t('sync_complete') : `${updated.lastStatus}`, ok ? 'success' : 'error');
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Run failed';
+      error = e instanceof Error ? e.message : t('save_failed');
     } finally {
       running = null;
     }
   }
 
   function formatLastRun(iso: string): string {
-    if (!iso) return 'never';
+    if (!iso) return t('never');
     const d = new Date(iso);
-    return isNaN(d.getTime()) ? iso : d.toLocaleString();
+    return isNaN(d.getTime()) ? iso : d.toLocaleString(lang);
   }
 
   function statusClass(status: string): string {
@@ -55,53 +56,53 @@
   }
 
   async function remove(job: SyncJob) {
-    if (!(await confirmDialog.ask(`Delete sync job “${job.name}”?`, 'Delete'))) return;
+    if (!(await confirmDialog.ask(tf('delete_sync_confirm', { name: job.name }), t('delete')))) return;
     try {
       await api.sync.remove(job.id);
       jobs = jobs.filter((j) => j.id !== job.id);
-      toasts.show('Sync job deleted');
+      toasts.show(t('sync_job_deleted'));
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Delete failed';
+      error = e instanceof Error ? e.message : t('delete_failed');
     }
   }
 </script>
 
 <div class="head">
-  <h1>DAV sync</h1>
-  <a class="button" href="/sync/new">New sync job</a>
+  <h1>{t('sync_title')}</h1>
+  <a class="button" href="/sync/new">{t('new_sync_job')}</a>
 </div>
 
 {#if loading}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('loading')}</p>
 {:else if error}
   <p class="error">{error}</p>
 {:else if jobs.length === 0}
   <div class="card empty">
-    <p>No sync jobs yet.</p>
-    <a class="button" href="/sync/new">Create your first sync job</a>
+    <p>{t('no_sync_jobs')}</p>
+    <a class="button" href="/sync/new">{t('create_first_sync')}</a>
   </div>
 {:else}
   <div class="list">
     {#each jobs as job (job.id)}
       <div class="card job">
         <div class="info">
-          <h2>{job.name} {#if !job.enabled}<span class="badge">disabled</span>{/if}</h2>
+          <h2>{job.name} {#if !job.enabled}<span class="badge">{t('disabled')}</span>{/if}</h2>
           <div class="meta">
             <span class="badge">{job.kind}</span>
             <span class="badge">{job.direction}</span>
             <span class="badge">{Math.round(job.intervalSeconds / 60)}m</span>
           </div>
           <div class="run">
-            <span class="last-run">Last run: {formatLastRun(job.lastRunAt)}</span>
+            <span class="last-run">{t('last_run')}: {formatLastRun(job.lastRunAt)}</span>
             {#if job.lastStatus}<span class={statusClass(job.lastStatus)}>{job.lastStatus}</span>{/if}
           </div>
         </div>
         <div class="row-actions">
           <button class="button button-secondary" onclick={() => run(job)} disabled={running === job.id}>
-            {running === job.id ? 'Running…' : 'Run now'}
+            {running === job.id ? t('running') : t('run_now')}
           </button>
-          <a class="button button-secondary" href={`/sync/${job.id}`}>Edit</a>
-          <button class="button button-secondary danger" onclick={() => remove(job)}>Delete</button>
+          <a class="button button-secondary" href={`/sync/${job.id}`}>{t('edit')}</a>
+          <button class="button button-secondary danger" onclick={() => remove(job)}>{t('delete')}</button>
         </div>
       </div>
     {/each}

@@ -86,6 +86,7 @@ export type RuleType = 'filter' | 'dedup' | 'rename' | 'strip' | 'timezone' | 'e
 
 export interface RuleConfig {
   type: RuleType;
+  enabled?: boolean; // omitted = enabled
   matchMode?: 'substring' | 'regex';
   pattern?: string;
   filterMode?: 'blacklist' | 'whitelist';
@@ -181,6 +182,8 @@ export interface SyncJob {
   bPasswordSet: boolean;
   intervalSeconds: number;
   enabled: boolean;
+  windowStart: string;
+  windowEnd: string;
   lastRunAt: string;
   lastStatus: string;
   createdAt: string;
@@ -200,6 +203,34 @@ export interface SyncJobInput {
   bPassword?: string;
   intervalSeconds: number;
   enabled: boolean;
+  windowStart?: string;
+  windowEnd?: string;
+}
+
+export interface SyncPreviewEntry {
+  uid: string;
+  title: string;
+  when: string;
+}
+
+export interface SyncPreviewResult {
+  a: SyncPreviewEntry[];
+  b: SyncPreviewEntry[];
+  merged: SyncPreviewEntry[];
+}
+
+export interface SyncPreviewInput {
+  kind: SyncKind;
+  direction: SyncDirection;
+  aUrl: string;
+  aUsername?: string;
+  aPassword?: string;
+  bUrl: string;
+  bUsername?: string;
+  bPassword?: string;
+  windowStart?: string;
+  windowEnd?: string;
+  weekStart?: string;
 }
 
 function jsonBody(method: string, body: unknown): RequestInit {
@@ -243,6 +274,8 @@ export const api = {
     create: (input: SyncJobInput) => request<SyncJob>('/api/sync', jsonBody('POST', input)),
     update: (id: string, input: SyncJobInput) => request<SyncJob>(`/api/sync/${id}`, jsonBody('PUT', input)),
     remove: (id: string) => request<void>(`/api/sync/${id}`, { method: 'DELETE' }),
-    run: (id: string) => request<SyncJob>(`/api/sync/${id}/run`, { method: 'POST' })
+    run: (id: string) => request<SyncJob>(`/api/sync/${id}/run`, { method: 'POST' }),
+    preview: (input: SyncPreviewInput, id?: string) =>
+      request<SyncPreviewResult>('/api/sync/preview', jsonBody('POST', id ? { ...input, id } : input))
   }
 };
