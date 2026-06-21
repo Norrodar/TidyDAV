@@ -162,6 +162,14 @@
     dragIndex = null;
     dragOverIndex = null;
   }
+  // Keyboard-accessible reordering alternative to drag & drop.
+  function moveRule(i: number, delta: number) {
+    const j = i + delta;
+    if (j < 0 || j >= rules.length) return;
+    const arr = rules.slice();
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    rules = arr;
+  }
 
   function toggleTrigger(type: string) {
     notifyTriggers = notifyTriggers.includes(type)
@@ -367,6 +375,10 @@
                 <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
                 <circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
               </svg>
+            </span>
+            <span class="move-btns">
+              <button type="button" class="move" onclick={() => moveRule(i, -1)} disabled={i === 0} aria-label={t('move_up')} title={t('move_up')}>▲</button>
+              <button type="button" class="move" onclick={() => moveRule(i, 1)} disabled={i === rules.length - 1} aria-label={t('move_down')} title={t('move_down')}>▼</button>
             </span>
             <span class="rule-num">{i + 1}</span>
             <select
@@ -775,6 +787,34 @@
   .drag-handle svg {
     width: 16px;
     height: 16px;
+  }
+  .move-btns {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .move {
+    width: 20px;
+    height: 14px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--separator);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 8px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+  }
+  .move:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .move:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
   }
   .rule-num {
     flex-shrink: 0;

@@ -217,7 +217,7 @@
           </div>
         {/if}
         <div class="three">
-          <div>
+          <div class="col">
             <h3>{t('server_a')} <span class="badge">{preview.a.length}</span></h3>
             <ul>
               {#each preview.a as e, i (i)}
@@ -225,7 +225,7 @@
               {/each}
             </ul>
           </div>
-          <div>
+          <div class="col">
             <h3>{t('server_b')} <span class="badge">{preview.b.length}</span></h3>
             <ul>
               {#each preview.b as e, i (i)}
@@ -233,7 +233,7 @@
               {/each}
             </ul>
           </div>
-          <div>
+          <div class="col result">
             <h3>{t('result')} ({t(flowKey(direction))}) <span class="badge badge-ok">{preview.merged.length}</span></h3>
             <ul>
               {#each preview.merged as e, i (i)}
@@ -308,6 +308,9 @@
     grid-template-columns: 1fr auto 1fr;
     gap: var(--space-4);
     align-items: center;
+  }
+  .endpoints :global(.card) {
+    border-top: 2px solid var(--accent);
   }
   @media (max-width: 760px) {
     .endpoints {
@@ -456,11 +459,25 @@
     flex-direction: column;
     gap: var(--space-1);
   }
+  .col.result {
+    padding: var(--space-3);
+    margin: calc(-1 * var(--space-3));
+    border-radius: var(--radius-md);
+    background: rgba(48, 209, 88, 0.05);
+  }
   li {
     font-size: var(--text-sm);
     padding: var(--space-2) var(--space-3);
     background: var(--bg-base);
     border-radius: var(--radius-sm);
+    border-left: 2px solid var(--separator);
+    transition: border-color var(--dur-fast) var(--ease);
+  }
+  li:hover {
+    border-left-color: var(--accent);
+  }
+  .result li {
+    border-left-color: var(--success);
   }
   .when {
     color: var(--text-tertiary);
