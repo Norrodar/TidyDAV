@@ -20,6 +20,9 @@
   // constant, very slow pace.
   const wmRows = Array.from({ length: 4 });
   const wmWords = Array.from({ length: 8 });
+  // Per-row speed and phase so the rows don't all fly in together.
+  const wmDurs = [170, 240, 200, 285];
+  const wmDelays = [0, -60, -120, -185];
 
   // Apply custom accent color from config when present.
   $effect(() => {
@@ -100,7 +103,7 @@
   <div class="wallpaper" class:static={!session.backgroundAnimation} aria-hidden="true">
     <div class="wm-field">
       {#each wmRows as _, r}
-        <div class="wm-row" class:reverse={r % 2 === 1} style="--d:{-r * 13}s; opacity:{0.92 - (r % 3) * 0.16}">
+        <div class="wm-row" class:reverse={r % 2 === 1} style="--d:{wmDelays[r]}s; --dur:{wmDurs[r]}s; opacity:{0.92 - (r % 3) * 0.16}">
           <div class="wm-track">
             {#each wmWords as _w}
               <span class="wm-word">Tidy<span class="dav">DAV</span></span>
@@ -179,13 +182,13 @@
     /* One whole "TidyDAV " unit in the monospace face: 7 chars + a space gap.
        Translating by exactly this keeps the repeat seamless. */
     font-family: var(--font-mono);
-    font-weight: 900;
-    font-size: clamp(360px, 48vw, 960px);
+    font-weight: 800;
+    font-size: clamp(240px, 32vw, 640px);
   }
   .wm-track {
     display: inline-flex;
     will-change: transform;
-    animation: wm-marquee 192s linear infinite;
+    animation: wm-marquee var(--dur, 200s) linear infinite;
     animation-delay: var(--d, 0s);
   }
   .wm-row.reverse .wm-track {
