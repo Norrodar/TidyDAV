@@ -67,9 +67,9 @@ button {
 .card {
   /* Translucent so the wallpaper shows through, then heavily blurred and
      darkened by the backdrop filter for a frosted-glass effect. */
-  background: rgba(14, 14, 16, 0.6);
-  backdrop-filter: blur(32px) brightness(0.62) saturate(120%);
-  -webkit-backdrop-filter: blur(32px) brightness(0.62) saturate(120%);
+  background: rgba(16, 16, 18, 0.52);
+  backdrop-filter: blur(32px) brightness(0.82) saturate(120%);
+  -webkit-backdrop-filter: blur(32px) brightness(0.82) saturate(120%);
   border: 1px solid var(--separator);
   border-radius: var(--radius-lg);
   padding: var(--space-6);

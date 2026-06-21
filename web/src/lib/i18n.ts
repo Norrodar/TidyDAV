@@ -74,6 +74,7 @@ const en: Translations = {
 
   // Sources
   sources: 'Sources',
+  sources_hint: 'Multiple sources are merged into a single calendar.',
   add_source: 'Add source',
   source_url_placeholder: 'https://example.com/feed.ics',
   use_credentials: 'Use username & password',
@@ -127,7 +128,7 @@ const en: Translations = {
   // Advanced
   advanced: 'Advanced',
   enable_advanced: 'Enable advanced settings',
-  cache_ttl: 'Cache TTL (seconds)',
+  cache_ttl: 'Cache duration in minutes (TTL)',
   cache_title: 'Keep a cached copy',
   cache_desc:
     'TidyDAV remembers the last fetched calendar for a while, so it loads faster and still works if the source is briefly down.',
@@ -288,6 +289,7 @@ const de: Translations = {
 
   // Sources
   sources: 'Quellen',
+  sources_hint: 'Mehrere Quellen werden zu einem Kalender zusammengefasst.',
   add_source: 'Quelle hinzufügen',
   source_url_placeholder: 'https://example.com/feed.ics',
   use_credentials: 'Benutzername & Passwort verwenden',
@@ -341,7 +343,7 @@ const de: Translations = {
   // Advanced
   advanced: 'Erweitert',
   enable_advanced: 'Erweiterte Einstellungen aktivieren',
-  cache_ttl: 'Cache-TTL (Sekunden)',
+  cache_ttl: 'Zwischenspeicherdauer in Minuten (Cache-TTL)',
   cache_title: 'Zwischenkopie behalten',
   cache_desc:
     'TidyDAV merkt sich den zuletzt geladenen Kalender eine Weile – dadurch lädt er schneller und funktioniert auch, wenn die Quelle kurz nicht erreichbar ist.',

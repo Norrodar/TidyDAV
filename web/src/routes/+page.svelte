@@ -169,6 +169,8 @@
     overflow: hidden;
     text-decoration: none;
     color: var(--text-primary);
+    backdrop-filter: blur(32px) brightness(0.82) saturate(120%);
+    -webkit-backdrop-filter: blur(32px) brightness(0.82) saturate(120%);
     transition:
       border-color var(--dur-base) var(--ease),
       transform var(--dur-base) var(--ease);
@@ -180,12 +182,12 @@
   }
 
   .tile-feeds {
-    background: linear-gradient(145deg, var(--bg-elevated) 0%, rgba(10, 132, 255, 0.12) 100%);
+    background: linear-gradient(145deg, rgba(22, 22, 24, 0.5) 0%, rgba(10, 132, 255, 0.16) 100%);
     color: #0a84ff;
   }
 
   .tile-sync {
-    background: linear-gradient(145deg, var(--bg-elevated) 0%, rgba(48, 209, 88, 0.1) 100%);
+    background: linear-gradient(145deg, rgba(22, 22, 24, 0.5) 0%, rgba(48, 209, 88, 0.14) 100%);
     color: #30d158;
   }
 

@@ -28,7 +28,8 @@
   };
 
   let name = $state(initial?.name ?? '');
-  let ttlSeconds = $state(initial?.ttlSeconds ?? 900);
+  // Cache TTL is edited in minutes; stored/sent in seconds. Default 15 min.
+  let ttlMinutes = $state(Math.max(1, Math.round((initial?.ttlSeconds ?? 900) / 60)));
   let sources = $state<SourceRow[]>(
     initial && initial.sources.length
       ? initial.sources.map((s) => ({
@@ -249,7 +250,7 @@
   function buildInput(): FeedInput {
     return {
       name,
-      ttlSeconds: cacheEnabled ? ttlSeconds : 900,
+      ttlSeconds: cacheEnabled ? Math.max(1, Math.round(ttlMinutes)) * 60 : 900,
       sources: sources
         .filter((s) => s.url.trim() !== '')
         .map((s) => ({
@@ -374,6 +375,7 @@
         <h2>{t('sources')}</h2>
         <button type="button" class="button button-secondary" onclick={addSource}>{t('add_source')}</button>
       </div>
+      <p class="muted">{t('sources_hint')}</p>
       {#each sources as source, i (i)}
         <div class="source">
           <div class="row">
@@ -593,7 +595,7 @@
         {#if cacheEnabled}
           <label class="field">
             <span>{t('cache_ttl')}</span>
-            <input class="input narrow" type="number" min="0" bind:value={ttlSeconds} />
+            <input class="input narrow" type="number" min="1" bind:value={ttlMinutes} />
           </label>
         {/if}
       </div>
@@ -1108,17 +1110,18 @@
   /* Preview panel */
   .preview-panel {
     position: sticky;
-    top: var(--space-5);
+    /* Clear the sticky 56px top bar plus a little breathing room. */
+    top: calc(56px + var(--space-4));
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
     padding: var(--space-4);
     border: 1px solid var(--separator);
     border-radius: var(--radius-lg);
-    background: rgba(14, 14, 16, 0.6);
-    backdrop-filter: blur(32px) brightness(0.62) saturate(120%);
-    -webkit-backdrop-filter: blur(32px) brightness(0.62) saturate(120%);
-    max-height: calc(100vh - 2 * var(--space-5));
+    background: rgba(16, 16, 18, 0.52);
+    backdrop-filter: blur(32px) brightness(0.82) saturate(120%);
+    -webkit-backdrop-filter: blur(32px) brightness(0.82) saturate(120%);
+    max-height: calc(100vh - 56px - 2 * var(--space-4));
     overflow: auto;
   }
   .panel-head {
