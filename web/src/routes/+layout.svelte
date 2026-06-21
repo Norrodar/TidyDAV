@@ -105,9 +105,18 @@
       {#each wmRows as _, r}
         <div class="wm-row" class:reverse={r % 2 === 1} style="--d:{wmDelays[r]}s; --dur:{wmDurs[r]}s; opacity:{0.92 - (r % 3) * 0.16}">
           <div class="wm-track">
-            {#each wmWords as _w}
-              <span class="wm-word">Tidy<span class="dav">DAV</span></span>
-            {/each}
+            <!-- Two identical groups; the marquee shifts by exactly one group
+                 (-50%), so the loop is seamless with a proportional font too. -->
+            <div class="wm-group">
+              {#each wmWords as _w}
+                <span class="wm-word">Tidy<span class="dav">DAV</span></span>
+              {/each}
+            </div>
+            <div class="wm-group">
+              {#each wmWords as _w}
+                <span class="wm-word">Tidy<span class="dav">DAV</span></span>
+              {/each}
+            </div>
           </div>
         </div>
       {/each}
@@ -181,7 +190,7 @@
     white-space: nowrap;
     /* One whole "TidyDAV " unit in the monospace face: 7 chars + a space gap.
        Translating by exactly this keeps the repeat seamless. */
-    font-family: var(--font-mono);
+    font-family: var(--font-ui);
     font-weight: 800;
     font-size: clamp(240px, 32vw, 640px);
   }
@@ -191,6 +200,11 @@
     animation: wm-marquee var(--dur, 200s) linear infinite;
     animation-delay: var(--d, 0s);
   }
+  .wm-group {
+    display: inline-flex;
+    gap: 0.5em;
+    padding-right: 0.5em;
+  }
   .wm-row.reverse .wm-track {
     animation-name: wm-marquee-rev;
   }
@@ -198,7 +212,6 @@
     animation: none;
   }
   .wm-word {
-    padding-right: 4ch;
     color: rgba(255, 255, 255, 0.06);
   }
   .wm-word .dav {
@@ -207,10 +220,10 @@
   }
   @keyframes wm-marquee {
     from { transform: translateX(0); }
-    to { transform: translateX(-11ch); }
+    to { transform: translateX(-50%); }
   }
   @keyframes wm-marquee-rev {
-    from { transform: translateX(-11ch); }
+    from { transform: translateX(-50%); }
     to { transform: translateX(0); }
   }
   @media (prefers-reduced-motion: reduce) {
