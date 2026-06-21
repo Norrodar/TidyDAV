@@ -137,6 +137,7 @@ const en: Translations = {
   // Preview
   preview: 'Preview',
   load_preview_week: 'Load preview week',
+  apply_rules: 'Apply rules to preview',
   previewing: 'Previewing…',
   refresh_preview: 'Refresh',
   original: 'Original',
@@ -327,6 +328,7 @@ const de: Translations = {
   // Preview
   preview: 'Vorschau',
   load_preview_week: 'Vorschauwoche laden',
+  apply_rules: 'Regeln auf Vorschau anwenden',
   previewing: 'Vorschau lädt…',
   refresh_preview: 'Aktualisieren',
   original: 'Original',

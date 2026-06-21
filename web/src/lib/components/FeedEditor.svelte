@@ -292,6 +292,11 @@
           </div>
         </div>
       {/each}
+      <div class="card-foot">
+        <button type="button" class="button button-secondary" onclick={runPreview} disabled={previewing}>
+          {previewing ? t('previewing') : t('load_preview_week')}
+        </button>
+      </div>
     </section>
 
     <section class="card">
@@ -414,6 +419,11 @@
           {/if}
         </div>
       {/each}
+      <div class="card-foot">
+        <button type="button" class="button button-secondary" onclick={runPreview} disabled={previewing}>
+          {previewing ? t('previewing') : t('apply_rules')}
+        </button>
+      </div>
     </section>
 
     <section class="card">
@@ -505,9 +515,6 @@
     {#if error}<p class="error">{error}</p>{/if}
 
     <div class="actions">
-      <button type="button" class="button button-secondary" onclick={runPreview} disabled={previewing}>
-        {previewing ? t('previewing') : t('load_preview_week')}
-      </button>
       <button type="submit" class="button" disabled={saving}>
         {saving ? t('saving') : feed ? t('save_changes') : t('create_calendar')}
       </button>
@@ -529,9 +536,6 @@
           <span class="week-label">{tf('this_week', { date: currentWeekStart.toLocaleDateString(lang) })}</span>
           <button type="button" class="button button-secondary button-sm" onclick={() => weekOffset++}>{t('next_week')} ›</button>
         </div>
-        <button type="button" class="button button-secondary button-sm refresh" onclick={runPreview} disabled={previewing}>
-          {previewing ? t('previewing') : t('refresh_preview')}
-        </button>
 
         <div class="diff">
           <div>
@@ -567,11 +571,11 @@
 <style>
   .editor-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: var(--space-5);
     align-items: start;
   }
-  @media (max-width: 900px) {
+  @media (max-width: 1024px) {
     .editor-layout {
       grid-template-columns: 1fr;
     }
@@ -591,6 +595,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+  }
+  .card-foot {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--separator);
   }
   h2 {
     font-size: var(--text-lg);
@@ -814,13 +824,15 @@
     text-align: center;
     flex: 1;
   }
-  .refresh {
-    align-self: flex-start;
-  }
   .diff {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: var(--space-4);
+  }
+  @media (max-width: 540px) {
+    .diff {
+      grid-template-columns: 1fr;
+    }
   }
   ul {
     list-style: none;
