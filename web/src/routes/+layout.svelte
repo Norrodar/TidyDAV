@@ -21,8 +21,8 @@
   const wmRows = Array.from({ length: 4 });
   const wmWords = Array.from({ length: 8 });
   // Per-row speed and phase so the rows don't all fly in together.
-  const wmDurs = [170, 240, 200, 285];
-  const wmDelays = [0, -60, -120, -185];
+  const wmDurs = [1700, 2400, 2000, 2850];
+  const wmDelays = [0, -600, -1200, -1850];
 
   // Apply custom accent color from config when present.
   $effect(() => {
