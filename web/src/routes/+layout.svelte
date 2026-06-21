@@ -16,13 +16,10 @@
     session.refresh();
   });
 
-  // Watermark rows; alternating rows scroll in opposite diagonal directions at a
-  // constant, very slow pace.
-  const wmRows = Array.from({ length: 4 });
-  const wmWords = Array.from({ length: 8 });
-  // Per-row speed and phase so the rows don't all fly in together.
-  const wmDurs = [1700, 2400, 2000, 2850];
-  const wmDelays = [0, -600, -1200, -1850];
+  // One large diagonal "TidyDAV" line in the lower-right, with a smaller
+  // counter-scrolling line beside it. Each line repeats the word enough times to
+  // span the rotated track; the marquee shifts by exactly one copy (-50%).
+  const wmWords = Array.from({ length: 6 });
 
   // Apply custom accent color from config when present.
   $effect(() => {
@@ -101,25 +98,29 @@
 
 <div class="app">
   <div class="wallpaper" class:static={!session.backgroundAnimation} aria-hidden="true">
-    <div class="wm-field">
-      {#each wmRows as _, r}
-        <div class="wm-row" class:reverse={r % 2 === 1} style="--d:{wmDelays[r]}s; --dur:{wmDurs[r]}s; opacity:{0.92 - (r % 3) * 0.16}">
-          <div class="wm-track">
-            <!-- Two identical groups; the marquee shifts by exactly one group
-                 (-50%), so the loop is seamless with a proportional font too. -->
-            <div class="wm-group">
-              {#each wmWords as _w}
-                <span class="wm-word">Tidy<span class="dav">DAV</span></span>
-              {/each}
-            </div>
-            <div class="wm-group">
-              {#each wmWords as _w}
-                <span class="wm-word">Tidy<span class="dav">DAV</span></span>
-              {/each}
-            </div>
+    <div class="wm-corner">
+      <!-- Big line: scrolls toward the lower-left. -->
+      <div class="wm-row big">
+        <div class="wm-track" style="--dur:2400s">
+          <div class="wm-group">
+            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span>{/each}
+          </div>
+          <div class="wm-group">
+            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span>{/each}
           </div>
         </div>
-      {/each}
+      </div>
+      <!-- Smaller line directly beside it: scrolls the opposite way. -->
+      <div class="wm-row small reverse">
+        <div class="wm-track" style="--dur:1700s">
+          <div class="wm-group">
+            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span>{/each}
+          </div>
+          <div class="wm-group">
+            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span>{/each}
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -174,36 +175,39 @@
     pointer-events: none;
     overflow: hidden;
   }
-  .wm-field {
+  /* Anchored in the lower-right third and rotated so the lines run diagonally. */
+  .wm-corner {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 200vmax;
-    height: 200vmax;
+    top: 74%;
+    left: 66%;
+    width: 150vmax;
     transform: translate(-50%, -50%) rotate(-45deg);
+    transform-origin: center;
     display: flex;
     flex-direction: column;
-    justify-content: space-around;
+    gap: 0.04em;
   }
   .wm-row {
     overflow: hidden;
     white-space: nowrap;
-    /* One whole "TidyDAV " unit in the monospace face: 7 chars + a space gap.
-       Translating by exactly this keeps the repeat seamless. */
     font-family: var(--font-ui);
     font-weight: 800;
-    font-size: clamp(240px, 32vw, 640px);
+  }
+  .wm-row.big {
+    font-size: clamp(120px, 15vw, 300px);
+  }
+  .wm-row.small {
+    font-size: clamp(64px, 8vw, 150px);
   }
   .wm-track {
     display: inline-flex;
     will-change: transform;
-    animation: wm-marquee var(--dur, 200s) linear infinite;
-    animation-delay: var(--d, 0s);
+    animation: wm-marquee var(--dur, 2400s) linear infinite;
   }
   .wm-group {
     display: inline-flex;
-    gap: 0.5em;
-    padding-right: 0.5em;
+    gap: 0.12em;
+    padding-right: 0.12em;
   }
   .wm-row.reverse .wm-track {
     animation-name: wm-marquee-rev;
