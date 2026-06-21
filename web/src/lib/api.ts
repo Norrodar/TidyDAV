@@ -155,6 +155,12 @@ export interface PreviewResult {
   transformed: EventSummary[];
 }
 
+export interface SourceCheckResult {
+  ok: boolean;
+  events: number;
+  error?: string;
+}
+
 export interface AuditEntry {
   id: number;
   userEmail: string;
@@ -261,7 +267,9 @@ export const api = {
     update: (id: string, input: FeedInput) => request<Feed>(`/api/feeds/${id}`, jsonBody('PUT', input)),
     remove: (id: string) => request<void>(`/api/feeds/${id}`, { method: 'DELETE' }),
     preview: (input: FeedInput, id?: string) =>
-      request<PreviewResult>('/api/feeds/preview', jsonBody('POST', id ? { ...input, id } : input))
+      request<PreviewResult>('/api/feeds/preview', jsonBody('POST', id ? { ...input, id } : input)),
+    checkSource: (input: { url: string; username?: string; password?: string; id?: string }) =>
+      request<SourceCheckResult>('/api/feeds/source-check', jsonBody('POST', input))
   },
 
   audit: {

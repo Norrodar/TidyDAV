@@ -83,6 +83,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   optional date range, and a three-column A/B/result merge preview.
 - Internationalised UI (English + German, auto-detected from the browser) across the
   calendars and sync pages; the "Feeds" area is now labelled "Calendars"/"Kalender".
+- Drag-and-drop rule reordering with keyboard-accessible up/down buttons; the stored
+  order is the execution order, so the pipeline respects it.
+- Per-source validation (`POST /api/feeds/source-check`): the editor shows a ✓/✕ next to
+  each source URL, fetching it (with or without credentials) and reporting whether it
+  parses as iCalendar, with the reason in a tooltip on failure.
+- Footer with tool info, the running build version (`/health`) and the latest `main`
+  commit from GitHub, flagging when an update is available.
+- Faint diagonal "TidyDAV" watermark in the app background.
+
+### Changed
+
+- The Docker image now embeds the commit SHA as its version (branch builds), so the
+  footer can compare the running build against the latest commit.
 
 ### Fixed
 

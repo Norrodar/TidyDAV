@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { untrack, onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import {
     api,
@@ -17,7 +17,15 @@
   let { feed }: { feed?: Feed } = $props();
   const initial = untrack(() => feed);
 
-  type SourceRow = { url: string; username: string; password: string; useAuth: boolean };
+  type SourceStatus = 'idle' | 'checking' | 'ok' | 'error';
+  type SourceRow = {
+    url: string;
+    username: string;
+    password: string;
+    useAuth: boolean;
+    status: SourceStatus;
+    statusMsg: string;
+  };
 
   let name = $state(initial?.name ?? '');
   let ttlSeconds = $state(initial?.ttlSeconds ?? 900);
@@ -27,9 +35,11 @@
           url: s.url,
           username: s.username ?? '',
           password: '',
-          useAuth: !!(s.username || s.hasPassword)
+          useAuth: !!(s.username || s.hasPassword),
+          status: 'idle' as SourceStatus,
+          statusMsg: ''
         }))
-      : [{ url: '', username: '', password: '', useAuth: false }]
+      : [{ url: '', username: '', password: '', useAuth: false, status: 'idle' as SourceStatus, statusMsg: '' }]
   );
   let rules = $state<RuleConfig[]>(initial ? initial.rules.map((r) => ({ ...r })) : []);
   let basicAuthUser = $state(initial?.basicAuthUser ?? '');
@@ -113,11 +123,48 @@
   }
 
   function addSource() {
-    sources = [...sources, { url: '', username: '', password: '', useAuth: false }];
+    sources = [...sources, { url: '', username: '', password: '', useAuth: false, status: 'idle', statusMsg: '' }];
   }
   function removeSource(i: number) {
     sources = sources.filter((_, idx) => idx !== i);
   }
+
+  // ── Per-source validation (debounced) ────────────────────────────────────────
+  const checkTimers: Record<number, ReturnType<typeof setTimeout>> = {};
+  function scheduleCheck(i: number) {
+    clearTimeout(checkTimers[i]);
+    if (!sources[i].url.trim()) {
+      sources[i].status = 'idle';
+      sources[i].statusMsg = '';
+      return;
+    }
+    checkTimers[i] = setTimeout(() => runSourceCheck(i), 600);
+  }
+  async function runSourceCheck(i: number) {
+    const s = sources[i];
+    if (!s || !s.url.trim()) return;
+    s.status = 'checking';
+    try {
+      const res = await api.feeds.checkSource({
+        url: s.url.trim(),
+        username: s.useAuth ? s.username || undefined : undefined,
+        password: s.useAuth ? s.password || undefined : undefined,
+        id: feed?.id
+      });
+      if (sources[i] !== s) return; // row moved/removed mid-flight
+      s.status = res.ok ? 'ok' : 'error';
+      s.statusMsg = res.ok ? tf('source_valid', { n: res.events }) : (res.error ?? 'invalid');
+    } catch (e) {
+      s.status = 'error';
+      s.statusMsg = e instanceof ApiError ? e.message : 'check failed';
+    }
+  }
+
+  onMount(() => {
+    sources.forEach((s, i) => {
+      if (s.url.trim()) runSourceCheck(i);
+    });
+  });
   function addRule() {
     rules = [...rules, defaultRule('filter')];
   }
@@ -310,16 +357,38 @@
       {#each sources as source, i (i)}
         <div class="source">
           <div class="row">
-            <input class="input grow" bind:value={source.url} placeholder={t('source_url_placeholder')} />
+            <div class="src-input grow">
+              <input
+                class="input"
+                bind:value={source.url}
+                oninput={() => scheduleCheck(i)}
+                placeholder={t('source_url_placeholder')}
+              />
+              {#if source.status !== 'idle'}
+                <span
+                  class="src-status {source.status}"
+                  title={source.status === 'checking' ? t('source_checking') : source.statusMsg}
+                >
+                  {#if source.status === 'checking'}
+                    <span class="spinner"></span>
+                  {:else if source.status === 'ok'}
+                    ✓
+                  {:else}
+                    ✕
+                  {/if}
+                </span>
+              {/if}
+            </div>
             <button type="button" class="icon" onclick={() => removeSource(i)} aria-label={t('remove')}>×</button>
           </div>
           <label class="check">
-            <input type="checkbox" bind:checked={source.useAuth} /> {t('use_credentials')}
+            <input type="checkbox" bind:checked={source.useAuth} onchange={() => scheduleCheck(i)} /> {t('use_credentials')}
           </label>
           <div class="row creds" class:disabled={!source.useAuth}>
             <input
               class="input grow"
               bind:value={source.username}
+              oninput={() => scheduleCheck(i)}
               disabled={!source.useAuth}
               autocomplete="off"
               placeholder={t('username')}
@@ -328,6 +397,7 @@
               class="input grow"
               type="password"
               bind:value={source.password}
+              oninput={() => scheduleCheck(i)}
               disabled={!source.useAuth}
               autocomplete="new-password"
               placeholder={t('password')}
@@ -335,11 +405,6 @@
           </div>
         </div>
       {/each}
-      <div class="card-foot">
-        <button type="button" class="button button-secondary" onclick={runPreview} disabled={previewing}>
-          {previewing ? t('previewing') : t('load_preview_week')}
-        </button>
-      </div>
     </section>
 
     <section class="card">
@@ -491,8 +556,8 @@
         </div>
       {/each}
       <div class="card-foot">
-        <button type="button" class="button button-secondary" onclick={runPreview} disabled={previewing}>
-          {previewing ? t('previewing') : t('apply_rules')}
+        <button type="button" class="button" onclick={runPreview} disabled={previewing}>
+          {previewing ? t('previewing') : t('preview')}
         </button>
       </div>
     </section>
@@ -642,7 +707,7 @@
 <style>
   .editor-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
     gap: var(--space-5);
     align-items: start;
   }
@@ -718,6 +783,42 @@
   }
   .creds.disabled {
     opacity: 0.45;
+  }
+  .src-input {
+    position: relative;
+  }
+  .src-input .input {
+    padding-right: var(--space-7);
+  }
+  .src-status {
+    position: absolute;
+    right: var(--space-3);
+    top: 50%;
+    transform: translateY(-50%);
+    display: grid;
+    place-items: center;
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    cursor: default;
+  }
+  .src-status.ok {
+    color: var(--success);
+  }
+  .src-status.error {
+    color: var(--danger);
+  }
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--separator);
+    border-top-color: var(--accent);
+    border-radius: var(--radius-full);
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   .check {
     display: flex;

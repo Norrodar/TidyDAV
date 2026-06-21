@@ -238,6 +238,56 @@ func (s *Server) handlePreviewFeed(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, previewResponse{Original: original, Transformed: transformed})
 }
 
+type sourceCheckRequest struct {
+	ID       string `json:"id,omitempty"` // reuse stored password for a saved feed's source
+	URL      string `json:"url"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type sourceCheckResponse struct {
+	OK     bool   `json:"ok"`
+	Events int    `json:"events"`
+	Error  string `json:"error,omitempty"`
+}
+
+// handleCheckSource validates a single feed source: it fetches the URL (with the
+// given credentials, or none) and reports whether it parses as iCalendar.
+func (s *Server) handleCheckSource(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var req sourceCheckRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	parsed, err := url.Parse(strings.TrimSpace(req.URL))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		writeJSON(w, http.StatusOK, sourceCheckResponse{OK: false, Error: "needs a valid http(s) URL"})
+		return
+	}
+
+	password := req.Password
+	if password == "" && req.ID != "" {
+		if existing, err := s.app.Store.FeedByID(r.Context(), req.ID); err == nil && existing.UserID == u.ID {
+			for _, src := range existing.Sources {
+				if src.URL == strings.TrimSpace(req.URL) && src.Password != "" {
+					password = src.Password
+					break
+				}
+			}
+		}
+	}
+
+	events, err := s.app.Feed.CheckSource(r.Context(), strings.TrimSpace(req.URL), req.Username, password)
+	if err != nil {
+		writeJSON(w, http.StatusOK, sourceCheckResponse{OK: false, Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, sourceCheckResponse{OK: true, Events: events})
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) (*store.User, bool) {

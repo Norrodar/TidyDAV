@@ -29,6 +29,13 @@ const en: Translations = {
   nav_sync: 'Sync',
   nav_audit: 'Audit',
 
+  footer_tagline: 'Self-hosted CalDAV/CardDAV proxy, ICS transformer and DAV sync.',
+  footer_running: 'Running',
+  footer_latest: 'Latest',
+  footer_up_to_date: 'up to date',
+  footer_update_available: 'update available',
+  footer_source: 'Source code',
+
   // Landing / dashboard
   home_headline: 'Your calendars and contacts, tidied up.',
   home_feeds_title: 'Calendars',
@@ -71,6 +78,8 @@ const en: Translations = {
   source_url_placeholder: 'https://example.com/feed.ics',
   use_credentials: 'Use username & password',
   username: 'Username',
+  source_checking: 'Checking…',
+  source_valid: 'Valid iCalendar — {n} event(s)',
 
   // Rules
   rules: 'Rules',
@@ -223,6 +232,13 @@ const de: Translations = {
   nav_sync: 'Sync',
   nav_audit: 'Audit',
 
+  footer_tagline: 'Selbstgehosteter CalDAV/CardDAV-Proxy, ICS-Transformer und DAV-Sync.',
+  footer_running: 'Läuft',
+  footer_latest: 'Aktuell',
+  footer_up_to_date: 'aktuell',
+  footer_update_available: 'Update verfügbar',
+  footer_source: 'Quellcode',
+
   // Landing / dashboard
   home_headline: 'Deine Kalender und Kontakte, aufgeräumt.',
   home_feeds_title: 'Kalender',
@@ -265,6 +281,8 @@ const de: Translations = {
   source_url_placeholder: 'https://example.com/feed.ics',
   use_credentials: 'Benutzername & Passwort verwenden',
   username: 'Benutzername',
+  source_checking: 'Prüfe…',
+  source_valid: 'Gültiges iCalendar — {n} Event(s)',
 
   // Rules
   rules: 'Regeln',

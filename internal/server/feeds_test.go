@@ -164,6 +164,60 @@ func TestFeedPreview(t *testing.T) {
 	}
 }
 
+func TestCheckSource(t *testing.T) {
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(icsUpstream))
+	}))
+	defer good.Close()
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("<html>not a calendar</html>"))
+	}))
+	defer bad.Close()
+
+	srv := newTestServer(t)
+	cookies := register(t, srv, "c@example.com")
+
+	decode := func(rec *httptest.ResponseRecorder) struct {
+		OK     bool   `json:"ok"`
+		Events int    `json:"events"`
+		Error  string `json:"error"`
+	} {
+		var out struct {
+			OK     bool   `json:"ok"`
+			Events int    `json:"events"`
+			Error  string `json:"error"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return out
+	}
+
+	// Valid iCalendar source.
+	rec := do(t, srv, http.MethodPost, "/api/feeds/source-check", `{"url":"`+good.URL+`"}`, cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := decode(rec); !got.OK || got.Events != 1 {
+		t.Errorf("good source = %+v, want ok with 1 event", got)
+	}
+
+	// Reachable but not iCalendar.
+	if got := decode(do(t, srv, http.MethodPost, "/api/feeds/source-check", `{"url":"`+bad.URL+`"}`, cookies)); got.OK || got.Error == "" {
+		t.Errorf("bad source = %+v, want not ok with error", got)
+	}
+
+	// Malformed URL.
+	if got := decode(do(t, srv, http.MethodPost, "/api/feeds/source-check", `{"url":"ftp://x"}`, cookies)); got.OK {
+		t.Errorf("ftp url reported ok: %+v", got)
+	}
+
+	// Requires auth.
+	if rec := do(t, srv, http.MethodPost, "/api/feeds/source-check", `{"url":"`+good.URL+`"}`, nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("no-auth check = %d, want 401", rec.Code)
+	}
+}
+
 func TestAuditRequiresAdmin(t *testing.T) {
 	srv := newTestServer(t)
 	admin := register(t, srv, "admin@example.com") // first user => admin

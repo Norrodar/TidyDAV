@@ -8,6 +8,7 @@
   import { t } from '$lib/i18n';
   import Toasts from '$lib/components/Toasts.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+  import Footer from '$lib/components/Footer.svelte';
 
   let { children } = $props();
 
@@ -91,6 +92,17 @@
 </script>
 
 <div class="app">
+  <div class="wallpaper" aria-hidden="true">
+    <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="tidy-watermark" width="360" height="220" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+          <text x="0" y="120" class="wm-text">TidyDAV</text>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#tidy-watermark)" />
+    </svg>
+  </div>
+
   <header class="topbar">
     <a class="brand" href="/">Tidy<span class="brand-accent">DAV</span></a>
 
@@ -121,6 +133,8 @@
   <main class="content">
     {@render children()}
   </main>
+
+  <Footer />
 </div>
 
 <Toasts />
@@ -131,6 +145,30 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+  }
+
+  .wallpaper {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.04;
+    animation: wm-shimmer 16s var(--ease) infinite;
+  }
+  .wallpaper :global(.wm-text) {
+    fill: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  /* Faint by default, drifting up a touch now and then. */
+  @keyframes wm-shimmer {
+    0%, 70%, 100% { opacity: 0.03; }
+    85% { opacity: 0.07; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wallpaper { animation: none; }
   }
 
   .topbar {
@@ -228,6 +266,8 @@
   }
 
   .content {
+    position: relative;
+    z-index: 1;
     flex: 1;
     width: 100%;
     max-width: 1040px;

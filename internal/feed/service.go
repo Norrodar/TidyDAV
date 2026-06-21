@@ -102,6 +102,21 @@ func (s *Service) Matches(ctx context.Context, f *store.Feed) ([]pipeline.RuleMa
 	return p.Matches(), nil
 }
 
+// CheckSource fetches a single source (with optional credentials) and reports
+// how many events it yields, or an error describing why the tool cannot process
+// it. Used by the editor's per-source validation indicator.
+func (s *Service) CheckSource(ctx context.Context, url, username, password string) (int, error) {
+	body, _, err := s.fetcher.FetchAuth(ctx, url, 0, username, password)
+	if err != nil {
+		return 0, err
+	}
+	cal, err := ics.Parse(bytes.NewReader(body))
+	if err != nil {
+		return 0, fmt.Errorf("response is not a valid iCalendar document")
+	}
+	return len(cal.Events()), nil
+}
+
 // merge fetches every source (tolerating individual failures via the proxy's
 // stale-on-error cache) and returns one calendar with their events, de-duplicated
 // by UID.
