@@ -18,8 +18,8 @@
 
   // Watermark rows; alternating rows scroll in opposite diagonal directions at a
   // constant, very slow pace.
-  const wmRows = Array.from({ length: 6 });
-  const wmWords = Array.from({ length: 12 });
+  const wmRows = Array.from({ length: 4 });
+  const wmWords = Array.from({ length: 8 });
 
   // Apply custom accent color from config when present.
   $effect(() => {
@@ -97,7 +97,7 @@
 </script>
 
 <div class="app">
-  <div class="wallpaper" aria-hidden="true">
+  <div class="wallpaper" class:static={!session.backgroundAnimation} aria-hidden="true">
     <div class="wm-field">
       {#each wmRows as _, r}
         <div class="wm-row" class:reverse={r % 2 === 1} style="--d:{-r * 13}s; opacity:{0.92 - (r % 3) * 0.16}">
@@ -179,17 +179,20 @@
     /* One whole "TidyDAV " unit in the monospace face: 7 chars + a space gap.
        Translating by exactly this keeps the repeat seamless. */
     font-family: var(--font-mono);
-    font-weight: 800;
-    font-size: clamp(180px, 24vw, 480px);
+    font-weight: 900;
+    font-size: clamp(360px, 48vw, 960px);
   }
   .wm-track {
     display: inline-flex;
     will-change: transform;
-    animation: wm-marquee 96s linear infinite;
+    animation: wm-marquee 192s linear infinite;
     animation-delay: var(--d, 0s);
   }
   .wm-row.reverse .wm-track {
     animation-name: wm-marquee-rev;
+  }
+  .wallpaper.static .wm-track {
+    animation: none;
   }
   .wm-word {
     padding-right: 4ch;

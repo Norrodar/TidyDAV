@@ -25,6 +25,7 @@ export interface SessionResponse {
   registrationEnabled: boolean;
   mailEnabled: boolean;
   accentColor?: string;
+  backgroundAnimation: boolean;
 }
 
 /** Error thrown for non-2xx API responses, carrying the HTTP status. */

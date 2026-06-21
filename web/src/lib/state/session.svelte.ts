@@ -13,6 +13,7 @@ class SessionState {
   registrationEnabled = $state(true);
   mailEnabled = $state(false);
   accentColor = $state<string | undefined>(undefined);
+  backgroundAnimation = $state(true);
   loading = $state(true);
   error = $state<string | null>(null);
 
@@ -28,6 +29,7 @@ class SessionState {
     this.registrationEnabled = s.registrationEnabled;
     this.mailEnabled = s.mailEnabled;
     this.accentColor = s.accentColor;
+    this.backgroundAnimation = s.backgroundAnimation ?? true;
   }
 
   /** Fetch the current session from the backend. */

@@ -59,6 +59,10 @@ type Config struct {
 	// default --accent CSS variable in the UI. Empty means use the default.
 	AccentColor string
 
+	// BackgroundAnimation toggles the animated diagonal wallpaper in the UI.
+	// Default true; set false to render it static.
+	BackgroundAnimation bool
+
 	OIDC OIDCConfig
 	SMTP SMTPConfig
 }
@@ -90,6 +94,10 @@ type OIDCConfig struct {
 	// Only disables password/email login entirely; only OIDC is allowed.
 	// Requires OIDC to be configured (IssuerURL + ClientID).
 	Only bool
+
+	// PostLogoutRedirectURI overrides where the provider sends the user after an
+	// OIDC logout. Empty falls back to BASE_URL + "/".
+	PostLogoutRedirectURI string
 }
 
 // Enabled reports whether OIDC is configured.
@@ -129,16 +137,18 @@ func Load() (*Config, error) {
 		NotifyInterval:      envDuration("TIDYDAV_NOTIFY_INTERVAL", 15*time.Minute),
 		SyncTick:            envDuration("TIDYDAV_SYNC_TICK", time.Minute),
 		AccentColor:         envHexColor("TIDYDAV_ACCENT_COLOR"),
+		BackgroundAnimation: envBool("TIDYDAV_BACKGROUND_ANIMATION", true),
 		OIDC: OIDCConfig{
-			IssuerURL:    strings.TrimRight(os.Getenv("TIDYDAV_OIDC_ISSUER_URL"), "/"),
-			ClientID:     os.Getenv("TIDYDAV_OIDC_CLIENT_ID"),
-			ClientSecret: os.Getenv("TIDYDAV_OIDC_CLIENT_SECRET"),
-			Scopes:       envFields("TIDYDAV_OIDC_SCOPES", []string{"openid", "profile", "email"}),
-			DisplayName:  envDefault("TIDYDAV_OIDC_DISPLAY_NAME", "SSO"),
-			AdminGroups:  envComma("TIDYDAV_OIDC_ADMIN_GROUPS"),
-			UserGroups:   envComma("TIDYDAV_OIDC_USER_GROUPS"),
-			GroupClaim:   envDefault("TIDYDAV_OIDC_GROUP_CLAIM", "groups"),
-			Only:         envBool("TIDYDAV_OIDC_ONLY", false),
+			IssuerURL:             strings.TrimRight(os.Getenv("TIDYDAV_OIDC_ISSUER_URL"), "/"),
+			ClientID:              os.Getenv("TIDYDAV_OIDC_CLIENT_ID"),
+			ClientSecret:          os.Getenv("TIDYDAV_OIDC_CLIENT_SECRET"),
+			Scopes:                envFields("TIDYDAV_OIDC_SCOPES", []string{"openid", "profile", "email"}),
+			DisplayName:           envDefault("TIDYDAV_OIDC_DISPLAY_NAME", "SSO"),
+			AdminGroups:           envComma("TIDYDAV_OIDC_ADMIN_GROUPS"),
+			UserGroups:            envComma("TIDYDAV_OIDC_USER_GROUPS"),
+			GroupClaim:            envDefault("TIDYDAV_OIDC_GROUP_CLAIM", "groups"),
+			Only:                  envBool("TIDYDAV_OIDC_ONLY", false),
+			PostLogoutRedirectURI: strings.TrimSpace(os.Getenv("TIDYDAV_OIDC_POST_LOGOUT_REDIRECT_URI")),
 		},
 		SMTP: SMTPConfig{
 			Host:       os.Getenv("TIDYDAV_SMTP_HOST"),

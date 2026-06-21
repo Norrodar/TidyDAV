@@ -47,6 +47,7 @@ type sessionResponse struct {
 	RegistrationEnabled bool          `json:"registrationEnabled"`
 	MailEnabled         bool          `json:"mailEnabled"`
 	AccentColor         string        `json:"accentColor,omitempty"`
+	BackgroundAnimation bool          `json:"backgroundAnimation"`
 }
 
 type credentialsRequest struct {
@@ -248,9 +249,13 @@ func (s *Server) handleOIDCLogout(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
+	redirect := s.app.Config.OIDC.PostLogoutRedirectURI
+	if redirect == "" {
+		redirect = s.app.Config.BaseURL + "/"
+	}
 	q := u.Query()
 	q.Set("client_id", s.app.Config.OIDC.ClientID)
-	q.Set("post_logout_redirect_uri", s.app.Config.BaseURL+"/")
+	q.Set("post_logout_redirect_uri", redirect)
 	u.RawQuery = q.Encode()
 	http.Redirect(w, r, u.String(), http.StatusFound)
 }
@@ -268,6 +273,7 @@ func (s *Server) sessionPayload(u *store.User) sessionResponse {
 		RegistrationEnabled: s.app.Auth.RegistrationEnabled(),
 		MailEnabled:         s.app.Auth.MailEnabled(),
 		AccentColor:         s.app.Config.AccentColor,
+		BackgroundAnimation: s.app.Config.BackgroundAnimation,
 	}
 }
 

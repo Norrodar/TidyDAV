@@ -106,6 +106,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The Docker image now embeds the commit SHA as its version (branch builds), so the
   footer can compare the running build against the latest commit.
+- `TIDYDAV_BACKGROUND_ANIMATION` (default `true`) toggles the animated wallpaper;
+  `TIDYDAV_OIDC_POST_LOGOUT_REDIRECT_URI` overrides the OIDC post-logout redirect.
+- Wallpaper text is bolder, much larger, more widely spaced and drifts more slowly;
+  cards and dashboard tiles darken the background less.
 
 ### Fixed
 

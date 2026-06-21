@@ -122,6 +122,8 @@ Prefix `TIDYDAV_`. Only two are required.
 | `TIDYDAV_LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error`. |
 | `TIDYDAV_NOTIFY_INTERVAL` | no | `15m` | How often the background notifier scans feeds for rule matches (Go duration). |
 | `TIDYDAV_SYNC_TICK` | no | `1m` | How often the DAV sync runner checks for due jobs (Go duration). |
+| `TIDYDAV_ACCENT_COLOR` | no | — | Optional hex color (e.g. `#ff6b35`) overriding the UI accent. Text color on the accent is auto-chosen for contrast. |
+| `TIDYDAV_BACKGROUND_ANIMATION` | no | `true` | Animated diagonal "TidyDAV" wallpaper. Set `false` to render it static. |
 
 ### Access mode
 | Var | Req | Default | Description |
@@ -137,6 +139,7 @@ Prefix `TIDYDAV_`. Only two are required.
 | `TIDYDAV_OIDC_CLIENT_ID` | no | — | Client ID. |
 | `TIDYDAV_OIDC_CLIENT_SECRET` | no | — | Client secret. |
 | `TIDYDAV_OIDC_SCOPES` | no | `openid profile email` | Space-separated scopes. |
+| `TIDYDAV_OIDC_POST_LOGOUT_REDIRECT_URI` | no | `<BASE_URL>/` | Where the provider returns the user after RP-initiated logout. Must be allow-listed at the provider. |
 
 ### SMTP (optional — enables password reset & email verification)
 | Var | Req | Default | Description |
