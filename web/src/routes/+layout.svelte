@@ -18,8 +18,8 @@
 
   // Watermark rows; alternating rows scroll in opposite diagonal directions at a
   // constant, very slow pace.
-  const wmRows = Array.from({ length: 9 });
-  const wmWords = Array.from({ length: 14 });
+  const wmRows = Array.from({ length: 6 });
+  const wmWords = Array.from({ length: 12 });
 
   // Apply custom accent color from config when present.
   $effect(() => {
@@ -180,19 +180,19 @@
        Translating by exactly this keeps the repeat seamless. */
     font-family: var(--font-mono);
     font-weight: 800;
-    font-size: clamp(120px, 16vw, 320px);
+    font-size: clamp(180px, 24vw, 480px);
   }
   .wm-track {
     display: inline-flex;
     will-change: transform;
-    animation: wm-marquee 64s linear infinite;
+    animation: wm-marquee 96s linear infinite;
     animation-delay: var(--d, 0s);
   }
   .wm-row.reverse .wm-track {
     animation-name: wm-marquee-rev;
   }
   .wm-word {
-    padding-right: 1ch;
+    padding-right: 4ch;
     color: rgba(255, 255, 255, 0.06);
   }
   .wm-word .dav {
@@ -201,10 +201,10 @@
   }
   @keyframes wm-marquee {
     from { transform: translateX(0); }
-    to { transform: translateX(-8ch); }
+    to { transform: translateX(-11ch); }
   }
   @keyframes wm-marquee-rev {
-    from { transform: translateX(-8ch); }
+    from { transform: translateX(-11ch); }
     to { transform: translateX(0); }
   }
   @media (prefers-reduced-motion: reduce) {
