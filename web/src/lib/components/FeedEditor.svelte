@@ -1115,7 +1115,9 @@
     padding: var(--space-4);
     border: 1px solid var(--separator);
     border-radius: var(--radius-lg);
-    background: var(--bg-elevated);
+    background: rgba(14, 14, 16, 0.6);
+    backdrop-filter: blur(32px) brightness(0.62) saturate(120%);
+    -webkit-backdrop-filter: blur(32px) brightness(0.62) saturate(120%);
     max-height: calc(100vh - 2 * var(--space-5));
     overflow: auto;
   }

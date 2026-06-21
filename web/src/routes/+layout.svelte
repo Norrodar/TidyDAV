@@ -12,53 +12,14 @@
 
   let { children } = $props();
 
-  // Wallpaper marquee speed, coupled to mouse activity: idles slow, speeds up
-  // while the mouse moves, then eases back.
-  let wmDur = $state(18); // seconds per one-word step
-  const wmSlow = 18;
-  const wmFast = 3;
-
   onMount(() => {
     session.refresh();
-
-    if (typeof window === 'undefined') return;
-    let boost = 0;
-    let last = 0;
-    let running = false;
-    let rafId = 0;
-
-    const step = (ts: number) => {
-      if (!last) last = ts;
-      const dt = (ts - last) / 1000;
-      last = ts;
-      boost = Math.max(0, boost - dt * 0.7); // ease back over ~1.4s
-      wmDur = wmSlow - boost * (wmSlow - wmFast);
-      if (boost > 0.001) {
-        rafId = requestAnimationFrame(step);
-      } else {
-        running = false;
-        last = 0;
-        wmDur = wmSlow;
-      }
-    };
-    const onMove = () => {
-      boost = 1;
-      if (!running) {
-        running = true;
-        last = 0;
-        rafId = requestAnimationFrame(step);
-      }
-    };
-    window.addEventListener('mousemove', onMove, { passive: true });
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      cancelAnimationFrame(rafId);
-    };
   });
 
-  // Watermark rows; alternating rows scroll in opposite diagonal directions.
-  const wmRows = Array.from({ length: 11 });
-  const wmWords = Array.from({ length: 16 });
+  // Watermark rows; alternating rows scroll in opposite diagonal directions at a
+  // constant, very slow pace.
+  const wmRows = Array.from({ length: 9 });
+  const wmWords = Array.from({ length: 14 });
 
   // Apply custom accent color from config when present.
   $effect(() => {
@@ -136,10 +97,10 @@
 </script>
 
 <div class="app">
-  <div class="wallpaper" aria-hidden="true" style="--wm-dur:{wmDur}s">
+  <div class="wallpaper" aria-hidden="true">
     <div class="wm-field">
       {#each wmRows as _, r}
-        <div class="wm-row" class:reverse={r % 2 === 1} style="--d:{-r * 7}s; opacity:{0.85 - (r % 3) * 0.18}">
+        <div class="wm-row" class:reverse={r % 2 === 1} style="--d:{-r * 13}s; opacity:{0.92 - (r % 3) * 0.16}">
           <div class="wm-track">
             {#each wmWords as _w}
               <span class="wm-word">Tidy<span class="dav">DAV</span></span>
@@ -219,12 +180,12 @@
        Translating by exactly this keeps the repeat seamless. */
     font-family: var(--font-mono);
     font-weight: 800;
-    font-size: clamp(56px, 7.5vw, 140px);
+    font-size: clamp(120px, 16vw, 320px);
   }
   .wm-track {
     display: inline-flex;
     will-change: transform;
-    animation: wm-marquee var(--wm-dur, 18s) linear infinite;
+    animation: wm-marquee 64s linear infinite;
     animation-delay: var(--d, 0s);
   }
   .wm-row.reverse .wm-track {
@@ -232,11 +193,11 @@
   }
   .wm-word {
     padding-right: 1ch;
-    color: rgba(255, 255, 255, 0.03);
+    color: rgba(255, 255, 255, 0.06);
   }
   .wm-word .dav {
     color: var(--accent);
-    opacity: 0.14;
+    opacity: 0.13;
   }
   @keyframes wm-marquee {
     from { transform: translateX(0); }
