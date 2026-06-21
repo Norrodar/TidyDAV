@@ -128,8 +128,14 @@ const en: Translations = {
   advanced: 'Advanced',
   enable_advanced: 'Enable advanced settings',
   cache_ttl: 'Cache TTL (seconds)',
-  basic_auth_user: 'Basic auth user',
-  basic_auth_password: 'Basic auth password',
+  cache_title: 'Keep a cached copy',
+  cache_desc:
+    'TidyDAV remembers the last fetched calendar for a while, so it loads faster and still works if the source is briefly down.',
+  basic_auth_title: 'Password-protect the link',
+  basic_auth_desc:
+    'Require a username and password to open your TidyDAV calendar link, so only you can use it.',
+  basic_auth_user: 'Username',
+  basic_auth_password: 'Password',
   basic_auth_disable_hint: 'leave empty to disable',
 
   // Notifications
@@ -137,6 +143,10 @@ const en: Translations = {
   notifications_desc:
     'Fire a notification when matching rules trigger. Checked on a schedule, and each matched event notifies only once.',
   trigger_on: 'Trigger on:',
+  notify_via: 'Notify via:',
+  notify_and: 'and',
+  notify_summary: 'On {triggers}, you are notified via {channels}.',
+  notify_summary_none: 'No notifications configured yet.',
   enable_webhook: 'Webhook',
   enable_ntfy: 'ntfy',
   enable_gotify: 'Gotify',
@@ -158,6 +168,7 @@ const en: Translations = {
   next_week: 'Next week',
   this_week: 'Week of {date}',
   no_events_week: 'No events this week.',
+  preview_empty: 'Click “Preview” to see the original and the result side by side.',
   hide_preview: 'Hide',
   show_preview: 'Show preview',
   preview_failed: 'Preview failed',
@@ -331,8 +342,14 @@ const de: Translations = {
   advanced: 'Erweitert',
   enable_advanced: 'Erweiterte Einstellungen aktivieren',
   cache_ttl: 'Cache-TTL (Sekunden)',
-  basic_auth_user: 'Basic-Auth-Benutzer',
-  basic_auth_password: 'Basic-Auth-Passwort',
+  cache_title: 'Zwischenkopie behalten',
+  cache_desc:
+    'TidyDAV merkt sich den zuletzt geladenen Kalender eine Weile – dadurch lädt er schneller und funktioniert auch, wenn die Quelle kurz nicht erreichbar ist.',
+  basic_auth_title: 'Link mit Passwort schützen',
+  basic_auth_desc:
+    'Verlangt Benutzername und Passwort zum Öffnen deines TidyDAV-Kalenderlinks, damit nur du ihn nutzen kannst.',
+  basic_auth_user: 'Benutzername',
+  basic_auth_password: 'Passwort',
   basic_auth_disable_hint: 'leer lassen zum Deaktivieren',
 
   // Notifications
@@ -340,6 +357,10 @@ const de: Translations = {
   notifications_desc:
     'Benachrichtigt, wenn passende Regeln auslösen. Geplant geprüft; jedes Event meldet nur einmal.',
   trigger_on: 'Auslösen bei:',
+  notify_via: 'Benachrichtige über:',
+  notify_and: 'und',
+  notify_summary: 'Beim {triggers} wird über {channels} benachrichtigt.',
+  notify_summary_none: 'Noch keine Benachrichtigung konfiguriert.',
   enable_webhook: 'Webhook',
   enable_ntfy: 'ntfy',
   enable_gotify: 'Gotify',
@@ -361,6 +382,7 @@ const de: Translations = {
   next_week: 'Nächste Woche',
   this_week: 'Woche ab {date}',
   no_events_week: 'Keine Events in dieser Woche.',
+  preview_empty: 'Klicke auf „Vorschau", um Original und Ergebnis nebeneinander zu sehen.',
   hide_preview: 'Ausblenden',
   show_preview: 'Vorschau anzeigen',
   preview_failed: 'Vorschau fehlgeschlagen',

@@ -12,9 +12,53 @@
 
   let { children } = $props();
 
+  // Wallpaper marquee speed, coupled to mouse activity: idles slow, speeds up
+  // while the mouse moves, then eases back.
+  let wmDur = $state(18); // seconds per one-word step
+  const wmSlow = 18;
+  const wmFast = 3;
+
   onMount(() => {
     session.refresh();
+
+    if (typeof window === 'undefined') return;
+    let boost = 0;
+    let last = 0;
+    let running = false;
+    let rafId = 0;
+
+    const step = (ts: number) => {
+      if (!last) last = ts;
+      const dt = (ts - last) / 1000;
+      last = ts;
+      boost = Math.max(0, boost - dt * 0.7); // ease back over ~1.4s
+      wmDur = wmSlow - boost * (wmSlow - wmFast);
+      if (boost > 0.001) {
+        rafId = requestAnimationFrame(step);
+      } else {
+        running = false;
+        last = 0;
+        wmDur = wmSlow;
+      }
+    };
+    const onMove = () => {
+      boost = 1;
+      if (!running) {
+        running = true;
+        last = 0;
+        rafId = requestAnimationFrame(step);
+      }
+    };
+    window.addEventListener('mousemove', onMove, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      cancelAnimationFrame(rafId);
+    };
   });
+
+  // Watermark rows; alternating rows scroll in opposite diagonal directions.
+  const wmRows = Array.from({ length: 11 });
+  const wmWords = Array.from({ length: 16 });
 
   // Apply custom accent color from config when present.
   $effect(() => {
@@ -92,15 +136,18 @@
 </script>
 
 <div class="app">
-  <div class="wallpaper" aria-hidden="true">
-    <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <pattern id="tidy-watermark" width="360" height="220" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
-          <text x="0" y="120" class="wm-text">TidyDAV</text>
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#tidy-watermark)" />
-    </svg>
+  <div class="wallpaper" aria-hidden="true" style="--wm-dur:{wmDur}s">
+    <div class="wm-field">
+      {#each wmRows as _, r}
+        <div class="wm-row" class:reverse={r % 2 === 1} style="--d:{-r * 7}s; opacity:{0.85 - (r % 3) * 0.18}">
+          <div class="wm-track">
+            {#each wmWords as _w}
+              <span class="wm-word">Tidy<span class="dav">DAV</span></span>
+            {/each}
+          </div>
+        </div>
+      {/each}
+    </div>
   </div>
 
   <header class="topbar">
@@ -152,23 +199,55 @@
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    opacity: 0.04;
-    animation: wm-shimmer 16s var(--ease) infinite;
+    overflow: hidden;
   }
-  .wallpaper :global(.wm-text) {
-    fill: var(--text-primary);
+  .wm-field {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 200vmax;
+    height: 200vmax;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+  }
+  .wm-row {
+    overflow: hidden;
+    white-space: nowrap;
+    /* One whole "TidyDAV " unit in the monospace face: 7 chars + a space gap.
+       Translating by exactly this keeps the repeat seamless. */
     font-family: var(--font-mono);
-    font-size: 30px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
+    font-weight: 800;
+    font-size: clamp(56px, 7.5vw, 140px);
   }
-  /* Faint by default, drifting up a touch now and then. */
-  @keyframes wm-shimmer {
-    0%, 70%, 100% { opacity: 0.03; }
-    85% { opacity: 0.07; }
+  .wm-track {
+    display: inline-flex;
+    will-change: transform;
+    animation: wm-marquee var(--wm-dur, 18s) linear infinite;
+    animation-delay: var(--d, 0s);
+  }
+  .wm-row.reverse .wm-track {
+    animation-name: wm-marquee-rev;
+  }
+  .wm-word {
+    padding-right: 1ch;
+    color: rgba(255, 255, 255, 0.03);
+  }
+  .wm-word .dav {
+    color: var(--accent);
+    opacity: 0.14;
+  }
+  @keyframes wm-marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-8ch); }
+  }
+  @keyframes wm-marquee-rev {
+    from { transform: translateX(-8ch); }
+    to { transform: translateX(0); }
   }
   @media (prefers-reduced-motion: reduce) {
-    .wallpaper { animation: none; }
+    .wm-track { animation: none; }
   }
 
   .topbar {

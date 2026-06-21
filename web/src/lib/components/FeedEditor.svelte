@@ -44,9 +44,9 @@
   let rules = $state<RuleConfig[]>(initial ? initial.rules.map((r) => ({ ...r })) : []);
   let basicAuthUser = $state(initial?.basicAuthUser ?? '');
   let basicAuthPassword = $state('');
-  let advancedEnabled = $state(
-    !!(initial && (initial.ttlSeconds !== 900 || initial.basicAuthUser || initial.basicAuthEnabled))
-  );
+  // Independently toggleable advanced options.
+  let cacheEnabled = $state(!!(initial && initial.ttlSeconds !== 900));
+  let authEnabled = $state(initial?.basicAuthEnabled ?? false);
 
   let notifyWebhook = $state(initial?.notifications.webhookUrl ?? '');
   let notifyNtfyServer = $state(initial?.notifications.ntfyServer ?? '');
@@ -249,7 +249,7 @@
   function buildInput(): FeedInput {
     return {
       name,
-      ttlSeconds: advancedEnabled ? ttlSeconds : 900,
+      ttlSeconds: cacheEnabled ? ttlSeconds : 900,
       sources: sources
         .filter((s) => s.url.trim() !== '')
         .map((s) => ({
@@ -258,8 +258,8 @@
           password: s.useAuth ? s.password || undefined : undefined
         })),
       rules,
-      basicAuthUser: advancedEnabled ? basicAuthUser : '',
-      basicAuthPassword: advancedEnabled ? basicAuthPassword || undefined : undefined,
+      basicAuthUser: authEnabled ? basicAuthUser : '',
+      basicAuthPassword: authEnabled ? basicAuthPassword || undefined : undefined,
       notifications: {
         webhookUrl: webhookEnabled ? notifyWebhook || undefined : '',
         ntfyServer: ntfyEnabled ? notifyNtfyServer || undefined : '',
@@ -337,6 +337,26 @@
   );
   const weekTransformed = $derived(
     (preview?.transformed ?? []).filter((e) => inWeek(e.start, currentWeekStart))
+  );
+
+  // Plain-language summary of what the notification config will do.
+  const notifyChannelLabels = $derived(
+    [
+      webhookEnabled ? t('enable_webhook') : '',
+      ntfyEnabled ? t('enable_ntfy') : '',
+      gotifyEnabled ? t('enable_gotify') : ''
+    ].filter(Boolean)
+  );
+  const notifyTriggerLabels = $derived(
+    notifyTriggers.map((x) => (x === 'rename' ? t('rule_rename') : t('rule_filter')))
+  );
+  const notifySummary = $derived(
+    notifyTriggerLabels.length && notifyChannelLabels.length
+      ? tf('notify_summary', {
+          triggers: notifyTriggerLabels.join(` ${t('notify_and')} `),
+          channels: notifyChannelLabels.join(` ${t('notify_and')} `)
+        })
+      : t('notify_summary_none')
   );
 </script>
 
@@ -447,7 +467,7 @@
             </span>
             <span class="rule-num">{i + 1}</span>
             <select
-              class="input"
+              class="input rule-type"
               value={rule.type}
               onchange={(e) => changeRuleType(i, e.currentTarget.value as RuleType)}
             >
@@ -455,11 +475,13 @@
                 <option value={rt}>{ruleLabel(rt)}</option>
               {/each}
             </select>
-            <label class="toggle">
-              <input type="checkbox" checked={isEnabled(rule)} onchange={() => toggleEnabled(rule)} />
-              {t('rule_enabled')}
-            </label>
-            <button type="button" class="icon" onclick={() => removeRule(i)} aria-label={t('remove')}>×</button>
+            <div class="rule-actions">
+              <label class="toggle">
+                <input type="checkbox" checked={isEnabled(rule)} onchange={() => toggleEnabled(rule)} />
+                {t('rule_enabled')}
+              </label>
+              <button type="button" class="icon" onclick={() => removeRule(i)} aria-label={t('remove')}>×</button>
+            </div>
           </div>
           <p class="rule-desc">{ruleHelp(rule.type)}</p>
 
@@ -563,57 +585,71 @@
     </section>
 
     <section class="card">
-      <label class="check head-check">
-        <input type="checkbox" bind:checked={advancedEnabled} /> <h2>{t('advanced')}</h2>
-      </label>
-      {#if advancedEnabled}
-        <div class="row wrap">
+      <h2>{t('advanced')}</h2>
+
+      <div class="opt">
+        <label class="check"><input type="checkbox" bind:checked={cacheEnabled} /> {t('cache_title')}</label>
+        <p class="opt-desc">{t('cache_desc')}</p>
+        {#if cacheEnabled}
           <label class="field">
             <span>{t('cache_ttl')}</span>
             <input class="input narrow" type="number" min="0" bind:value={ttlSeconds} />
           </label>
-          <label class="field grow">
-            <span>{t('basic_auth_user')}</span>
-            <input class="input" bind:value={basicAuthUser} placeholder={t('basic_auth_disable_hint')} />
-          </label>
-          <label class="field grow">
-            <span>{t('basic_auth_password')}</span>
-            <input
-              class="input"
-              type="password"
-              bind:value={basicAuthPassword}
-              autocomplete="new-password"
-              placeholder={feed?.basicAuthEnabled ? t('unchanged') : ''}
-            />
-          </label>
-        </div>
-      {/if}
+        {/if}
+      </div>
+
+      <div class="opt">
+        <label class="check"><input type="checkbox" bind:checked={authEnabled} /> {t('basic_auth_title')}</label>
+        <p class="opt-desc">{t('basic_auth_desc')}</p>
+        {#if authEnabled}
+          <div class="row wrap">
+            <label class="field grow">
+              <span>{t('basic_auth_user')}</span>
+              <input class="input" bind:value={basicAuthUser} placeholder={t('basic_auth_disable_hint')} />
+            </label>
+            <label class="field grow">
+              <span>{t('basic_auth_password')}</span>
+              <input
+                class="input"
+                type="password"
+                bind:value={basicAuthPassword}
+                autocomplete="new-password"
+                placeholder={feed?.basicAuthEnabled ? t('unchanged') : ''}
+              />
+            </label>
+          </div>
+        {/if}
+      </div>
     </section>
 
     <section class="card">
       <h2>{t('notifications')}</h2>
       <p class="muted">{t('notifications_desc')}</p>
-      <div class="triggers">
-        <span>{t('trigger_on')}</span>
-        <label>
-          <input type="checkbox" checked={notifyTriggers.includes('filter')} onchange={() => toggleTrigger('filter')} />
-          {t('rule_filter')}
-        </label>
-        <label>
-          <input type="checkbox" checked={notifyTriggers.includes('rename')} onchange={() => toggleTrigger('rename')} />
-          {t('rule_rename')}
-        </label>
+
+      <div class="notify-grid">
+        <div class="notify-col">
+          <div class="chips-label">{t('trigger_on')}</div>
+          <div class="chips">
+            <button type="button" class="chip" class:on={notifyTriggers.includes('filter')} onclick={() => toggleTrigger('filter')}>{t('rule_filter')}</button>
+            <button type="button" class="chip" class:on={notifyTriggers.includes('rename')} onclick={() => toggleTrigger('rename')}>{t('rule_rename')}</button>
+          </div>
+        </div>
+        <div class="notify-col">
+          <div class="chips-label">{t('notify_via')}</div>
+          <div class="chips">
+            <button type="button" class="chip" class:on={webhookEnabled} onclick={() => (webhookEnabled = !webhookEnabled)}>{t('enable_webhook')}</button>
+            <button type="button" class="chip" class:on={ntfyEnabled} onclick={() => (ntfyEnabled = !ntfyEnabled)}>{t('enable_ntfy')}</button>
+            <button type="button" class="chip" class:on={gotifyEnabled} onclick={() => (gotifyEnabled = !gotifyEnabled)}>{t('enable_gotify')}</button>
+          </div>
+        </div>
       </div>
 
-      <label class="check"><input type="checkbox" bind:checked={webhookEnabled} /> {t('enable_webhook')}</label>
       {#if webhookEnabled}
         <label class="field">
           <span>{t('webhook_url')}</span>
           <input class="input" bind:value={notifyWebhook} placeholder="https://…" />
         </label>
       {/if}
-
-      <label class="check"><input type="checkbox" bind:checked={ntfyEnabled} /> {t('enable_ntfy')}</label>
       {#if ntfyEnabled}
         <div class="row wrap">
           <label class="field grow">
@@ -626,8 +662,6 @@
           </label>
         </div>
       {/if}
-
-      <label class="check"><input type="checkbox" bind:checked={gotifyEnabled} /> {t('enable_gotify')}</label>
       {#if gotifyEnabled}
         <div class="row wrap">
           <label class="field grow">
@@ -646,6 +680,8 @@
           </label>
         </div>
       {/if}
+
+      <p class="notify-summary">{notifySummary}</p>
     </section>
 
     {#if error}<p class="error">{error}</p>{/if}
@@ -658,15 +694,18 @@
     </div>
   </form>
 
-  {#if preview}
     <aside class="preview-panel" class:collapsed={!panelOpen}>
       <div class="panel-head">
         <h2>{t('preview')}</h2>
-        <button type="button" class="linklike" onclick={() => (panelOpen = !panelOpen)}>
-          {panelOpen ? t('hide_preview') : t('show_preview')}
-        </button>
+        {#if preview}
+          <button type="button" class="linklike" onclick={() => (panelOpen = !panelOpen)}>
+            {panelOpen ? t('hide_preview') : t('show_preview')}
+          </button>
+        {/if}
       </div>
-      {#if panelOpen}
+      {#if !preview}
+        <p class="preview-empty">{t('preview_empty')}</p>
+      {:else if panelOpen}
         <div class="week-nav">
           <button type="button" class="button button-secondary button-sm" onclick={() => weekOffset--}>‹ {t('prev_week')}</button>
           <span class="week-label">{tf('this_week', { date: currentWeekStart.toLocaleDateString(lang) })}</span>
@@ -701,7 +740,6 @@
         </div>
       {/if}
     </aside>
-  {/if}
 </div>
 
 <style>
@@ -827,8 +865,22 @@
     font-size: var(--text-sm);
     color: var(--text-secondary);
   }
-  .head-check h2 {
-    font-weight: var(--weight-semibold);
+  .opt {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--separator);
+  }
+  .opt:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+  .opt-desc {
+    margin: 0 0 0 calc(16px + var(--space-2));
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+    line-height: 1.5;
   }
   .rule {
     position: relative;
@@ -929,8 +981,17 @@
     font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
   }
-  .rule-head select {
-    width: 160px;
+  .rule-type {
+    flex: 1 1 auto;
+    min-width: 120px;
+    width: auto;
+  }
+  .rule-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
   }
   .toggle {
     display: flex;
@@ -938,7 +999,7 @@
     gap: var(--space-1);
     font-size: var(--text-xs);
     color: var(--text-secondary);
-    margin-left: auto;
+    white-space: nowrap;
   }
   .rule-desc {
     margin: 0;
@@ -1008,18 +1069,24 @@
     font-size: var(--text-sm);
     margin: 0;
   }
-  .triggers {
+  .notify-grid {
     display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    font-size: var(--text-sm);
-    color: var(--text-secondary);
     flex-wrap: wrap;
+    gap: var(--space-5);
   }
-  .triggers label {
+  .notify-col {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: var(--space-2);
+  }
+  .notify-summary {
+    margin: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--bg-base);
+    border-left: 2px solid var(--accent);
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
   }
   .error {
     color: var(--danger);
@@ -1056,6 +1123,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+  }
+  .preview-empty {
+    margin: 0;
+    color: var(--text-tertiary);
+    font-size: var(--text-sm);
+    line-height: 1.6;
   }
   .week-nav {
     display: flex;

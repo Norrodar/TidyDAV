@@ -91,6 +91,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Footer with tool info, the running build version (`/health`) and the latest `main`
   commit from GitHub, flagging when an update is available.
 - Faint diagonal "TidyDAV" watermark in the app background.
+- Animated diagonal "TidyDAV" wallpaper: large alternating rows scroll in opposite
+  45° directions with a muted accent on "DAV"; the marquee speed reacts to mouse
+  activity (idles slow, speeds up while moving).
+- Calendar editor: the preview panel is shown from the start (placeholder until loaded)
+  and is wider so event names fit; the rule header keeps the type, "enabled" toggle and
+  delete on one tidy row; drag handle plus up/down move buttons.
+- Calendar editor "Advanced" split into independently toggleable options (cache and
+  link password protection), each with a one-sentence, plain-language explanation.
+- Calendar editor notifications grouped under "Trigger on" / "Notify via" headings with
+  a generated plain-language summary of what will happen.
 
 ### Changed
 
