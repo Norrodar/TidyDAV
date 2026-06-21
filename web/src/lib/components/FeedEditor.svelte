@@ -128,6 +128,41 @@
     rules[i] = defaultRule(type);
   }
 
+  // ── Drag & drop reordering ───────────────────────────────────────────────────
+  // The stored order is the execution order: the pipeline applies rules in array
+  // sequence, so reordering here changes how the calendar is processed.
+  let dragIndex = $state<number | null>(null);
+  let dragOverIndex = $state<number | null>(null);
+
+  function onRuleDragStart(e: DragEvent, i: number) {
+    dragIndex = i;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(i));
+    }
+  }
+  function onRuleDragOver(e: DragEvent, i: number) {
+    if (dragIndex === null) return;
+    e.preventDefault();
+    dragOverIndex = i;
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  }
+  function onRuleDrop(e: DragEvent, i: number) {
+    e.preventDefault();
+    if (dragIndex !== null && dragIndex !== i) {
+      const arr = rules.slice();
+      const [moved] = arr.splice(dragIndex, 1);
+      arr.splice(i, 0, moved);
+      rules = arr;
+    }
+    dragIndex = null;
+    dragOverIndex = null;
+  }
+  function onRuleDragEnd() {
+    dragIndex = null;
+    dragOverIndex = null;
+  }
+
   function toggleTrigger(type: string) {
     notifyTriggers = notifyTriggers.includes(type)
       ? notifyTriggers.filter((x) => x !== type)
@@ -307,8 +342,32 @@
       <p class="muted">{rules.length === 0 ? t('no_rules') : t('rules_apply_order')}</p>
 
       {#each rules as rule, i (i)}
-        <div class="rule" class:off={!isEnabled(rule)}>
+        <div
+          class="rule"
+          class:off={!isEnabled(rule)}
+          class:drag-over={dragOverIndex === i && dragIndex !== i}
+          class:dragging={dragIndex === i}
+          ondragover={(e) => onRuleDragOver(e, i)}
+          ondrop={(e) => onRuleDrop(e, i)}
+          role="group"
+        >
           <div class="rule-head">
+            <span
+              class="drag-handle"
+              draggable="true"
+              ondragstart={(e) => onRuleDragStart(e, i)}
+              ondragend={onRuleDragEnd}
+              title={t('reorder_rule')}
+              aria-label={t('reorder_rule')}
+              role="button"
+              tabindex="-1"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" />
+                <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
+                <circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
+              </svg>
+            </span>
             <span class="rule-num">{i + 1}</span>
             <select
               class="input"
@@ -538,7 +597,7 @@
         </div>
 
         <div class="diff">
-          <div>
+          <div class="diff-col">
             <h3>{t('original')} <span class="badge">{weekOriginal.length}</span></h3>
             {#if weekOriginal.length === 0}
               <p class="muted">{t('no_events_week')}</p>
@@ -550,7 +609,7 @@
               </ul>
             {/if}
           </div>
-          <div>
+          <div class="diff-col transformed">
             <h3>{t('transformed')} <span class="badge badge-ok">{weekTransformed.length}</span></h3>
             {#if weekTransformed.length === 0}
               <p class="muted">{t('no_events_week')}</p>
@@ -598,9 +657,12 @@
   }
   .card-foot {
     display: flex;
-    justify-content: flex-end;
-    padding-top: var(--space-2);
+    padding-top: var(--space-4);
     border-top: 1px solid var(--separator);
+  }
+  .card-foot :global(.button) {
+    width: 100%;
+    padding: var(--space-3) var(--space-5);
   }
   h2 {
     font-size: var(--text-lg);
@@ -656,15 +718,35 @@
     font-weight: var(--weight-semibold);
   }
   .rule {
+    position: relative;
     border: 1px solid var(--separator);
+    border-left: 3px solid var(--accent);
     border-radius: var(--radius-md);
-    padding: var(--space-3);
+    padding: var(--space-4);
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
+    transition:
+      border-color var(--dur-fast) var(--ease),
+      box-shadow var(--dur-fast) var(--ease),
+      opacity var(--dur-fast) var(--ease),
+      transform var(--dur-fast) var(--ease);
+  }
+  .rule:hover {
+    box-shadow: var(--shadow-sm);
   }
   .rule.off {
     opacity: 0.5;
+    border-left-color: var(--separator);
+  }
+  .rule.dragging {
+    opacity: 0.4;
+  }
+  .rule.drag-over {
+    border-color: var(--accent);
+    box-shadow: var(--focus-ring);
+    transform: translateY(-1px);
   }
   .rule-head {
     display: flex;
@@ -672,17 +754,39 @@
     align-items: center;
     flex-wrap: wrap;
   }
+  .drag-handle {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 28px;
+    color: var(--text-tertiary);
+    cursor: grab;
+    border-radius: var(--radius-sm);
+    transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+  }
+  .drag-handle:hover {
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+  .drag-handle svg {
+    width: 16px;
+    height: 16px;
+  }
   .rule-num {
     flex-shrink: 0;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     display: grid;
     place-items: center;
     border-radius: var(--radius-full);
-    background: var(--bg-base);
-    color: var(--text-tertiary);
+    background: var(--accent);
+    color: var(--accent-text);
     font-size: var(--text-xs);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-semibold);
   }
   .rule-head select {
     width: 160px;
@@ -847,6 +951,14 @@
     padding: var(--space-2) var(--space-3);
     background: var(--bg-base);
     border-radius: var(--radius-sm);
+    border-left: 2px solid var(--separator);
+    transition: border-color var(--dur-fast) var(--ease);
+  }
+  .diff-col.transformed li {
+    border-left-color: var(--success);
+  }
+  .diff-col li:hover {
+    border-left-color: var(--accent);
   }
   .when {
     color: var(--text-tertiary);
