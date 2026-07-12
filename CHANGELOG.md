@@ -113,6 +113,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Feeds whose upstream events lack `UID`/`DTSTAMP` (e.g. municipal waste
+  calendars) failed to serve with a 502 ("feed could not be rendered") because
+  go-ical refuses to encode such events. The merge step now synthesizes
+  deterministic UIDs (stable across fetches, distinct for exact duplicates) and
+  derives a DTSTAMP from DTSTART.
+- Served calendars now include a `VTIMEZONE` definition for every `TZID` their
+  events reference (RFC 5545 requirement; strict clients misread local times
+  otherwise): upstream definitions are passed through, and zones introduced by
+  the timezone rule are generated from the Go tzdata (`ics.VTimezone`).
 - Notifications no longer log the Gotify token (query string) or userinfo password on
   delivery failure — the URL is redacted in error messages.
 - Rename rules now reject an empty pattern, which previously inserted the replacement

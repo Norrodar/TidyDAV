@@ -5,9 +5,13 @@ package feed
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strconv"
 	"time"
 
 	"github.com/Norrodar/TidyDAV/internal/ics"
@@ -44,7 +48,7 @@ type EventSummary struct {
 // Render fetches and merges the feed's sources, applies the rule pipeline and
 // returns the serialized ICS.
 func (s *Service) Render(ctx context.Context, f *store.Feed) ([]byte, error) {
-	merged, err := s.merge(ctx, f)
+	merged, tzdefs, err := s.merge(ctx, f)
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +62,7 @@ func (s *Service) Render(ctx context.Context, f *store.Feed) ([]byte, error) {
 	if len(merged.Children) == 0 {
 		return []byte(emptyCalendar), nil
 	}
+	s.attachTimezones(merged, tzdefs)
 	var buf bytes.Buffer
 	if err := ics.Serialize(&buf, merged); err != nil {
 		return nil, fmt.Errorf("feed %s: serialize: %w", f.ID, err)
@@ -68,7 +73,7 @@ func (s *Service) Render(ctx context.Context, f *store.Feed) ([]byte, error) {
 // Preview returns the merged events before and after the rule pipeline, for a
 // diff view. It does not require the feed to be persisted.
 func (s *Service) Preview(ctx context.Context, f *store.Feed) (original, transformed []EventSummary, err error) {
-	merged, err := s.merge(ctx, f)
+	merged, _, err := s.merge(ctx, f)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -88,7 +93,7 @@ func (s *Service) Preview(ctx context.Context, f *store.Feed) (original, transfo
 // Matches renders the feed (merge + pipeline) and returns the rule matches that
 // drive notifications. It does not serialize the result.
 func (s *Service) Matches(ctx context.Context, f *store.Feed) ([]pipeline.RuleMatch, error) {
-	merged, err := s.merge(ctx, f)
+	merged, _, err := s.merge(ctx, f)
 	if err != nil {
 		return nil, err
 	}
@@ -119,14 +124,17 @@ func (s *Service) CheckSource(ctx context.Context, url, username, password strin
 
 // merge fetches every source (tolerating individual failures via the proxy's
 // stale-on-error cache) and returns one calendar with their events, de-duplicated
-// by UID.
-func (s *Service) merge(ctx context.Context, f *store.Feed) (*ical.Calendar, error) {
+// by UID, plus the upstream VTIMEZONE definitions keyed by TZID (reattached at
+// render time for the TZIDs the final events actually reference).
+func (s *Service) merge(ctx context.Context, f *store.Feed) (*ical.Calendar, map[string]*ical.Component, error) {
 	ttl := time.Duration(f.TTLSeconds) * time.Second
 	merged := ical.NewCalendar()
 	merged.Props.SetText(ical.PropProductID, "-//TidyDAV//EN")
 	merged.Props.SetText(ical.PropVersion, "2.0")
 
 	seenUID := make(map[string]struct{})
+	uidSeq := make(map[string]int)
+	tzdefs := make(map[string]*ical.Component)
 	var fetched int
 	for _, src := range f.Sources {
 		body, _, err := s.fetcher.FetchAuth(ctx, src.URL, ttl, src.Username, src.Password)
@@ -140,20 +148,149 @@ func (s *Service) merge(ctx context.Context, f *store.Feed) (*ical.Calendar, err
 			continue
 		}
 		fetched++
+		for _, child := range cal.Children {
+			if child.Name != ical.CompTimezone {
+				continue
+			}
+			if tzid, err := child.Props.Text(ical.PropTimezoneID); err == nil && tzid != "" {
+				if _, ok := tzdefs[tzid]; !ok {
+					tzdefs[tzid] = child
+				}
+			}
+		}
 		for _, e := range cal.Events() {
-			if uid := ics.Text(e, "UID"); uid != "" {
+			uid := ics.Text(e, "UID")
+			if uid == "" {
+				// Some real-world feeds omit UID, which go-ical requires on
+				// encode. Synthesize a deterministic one so serialization works
+				// and clients see stable identities across fetches. Exact
+				// duplicates get a sequence suffix and are kept (the dedup rule
+				// decides whether to drop them).
+				uid = syntheticUID(src.URL, e, uidSeq)
+				ics.SetText(e, "UID", uid)
+			} else {
 				if _, dup := seenUID[uid]; dup {
 					continue
 				}
 				seenUID[uid] = struct{}{}
 			}
+			ensureDTStamp(e)
 			merged.Children = append(merged.Children, e.Component)
 		}
 	}
 	if fetched == 0 && len(f.Sources) > 0 {
-		return nil, fmt.Errorf("feed %s: no source could be fetched", f.ID)
+		return nil, nil, fmt.Errorf("feed %s: no source could be fetched", f.ID)
 	}
-	return merged, nil
+	return merged, tzdefs, nil
+}
+
+// attachTimezones prepends a VTIMEZONE component for every TZID the calendar's
+// events reference (RFC 5545 requires it; strict clients misread local times
+// otherwise). Upstream definitions are reused; missing IANA zones — e.g. one
+// introduced by the timezone rule — are generated from the Go tzdata.
+func (s *Service) attachTimezones(cal *ical.Calendar, upstream map[string]*ical.Component) {
+	tzids := referencedTZIDs(cal)
+	if len(tzids) == 0 {
+		return
+	}
+	from, to := eventWindow(cal)
+	defs := make([]*ical.Component, 0, len(tzids))
+	for _, tzid := range tzids {
+		if def, ok := upstream[tzid]; ok {
+			defs = append(defs, def)
+			continue
+		}
+		def, err := ics.VTimezone(tzid, from, to)
+		if err != nil {
+			s.log.Warn("cannot build VTIMEZONE for referenced TZID", "tzid", tzid, "error", err)
+			continue
+		}
+		defs = append(defs, def)
+	}
+	cal.Children = append(defs, cal.Children...)
+}
+
+// referencedTZIDs returns the sorted set of TZID parameters used by the
+// calendar's events.
+func referencedTZIDs(cal *ical.Calendar) []string {
+	set := make(map[string]struct{})
+	for _, e := range cal.Events() {
+		for _, props := range e.Props {
+			for _, p := range props {
+				if tzid := p.Params.Get(ical.PropTimezoneID); tzid != "" {
+					set[tzid] = struct{}{}
+				}
+			}
+		}
+	}
+	out := make([]string, 0, len(set))
+	for tzid := range set {
+		out = append(out, tzid)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// eventWindow returns the [min, max] DTSTART across events padded by a year on
+// each side, so generated VTIMEZONEs cover every referenced occurrence.
+func eventWindow(cal *ical.Calendar) (time.Time, time.Time) {
+	var lo, hi time.Time
+	for _, e := range cal.Events() {
+		t, err := e.DateTimeStart(time.UTC)
+		if err != nil || t.IsZero() {
+			continue
+		}
+		if lo.IsZero() || t.Before(lo) {
+			lo = t
+		}
+		if hi.IsZero() || t.After(hi) {
+			hi = t
+		}
+	}
+	if lo.IsZero() {
+		now := time.Now().UTC()
+		return now.AddDate(-1, 0, 0), now.AddDate(1, 0, 0)
+	}
+	return lo.AddDate(-1, 0, 0), hi.AddDate(1, 0, 0)
+}
+
+// syntheticUID derives a stable UID for an event that has none: a hash of the
+// source URL and the event's identifying fields, with a sequence suffix so
+// exact duplicates stay distinct. Deterministic across fetches.
+func syntheticUID(sourceURL string, e ical.Event, seq map[string]int) string {
+	h := sha256.New()
+	for _, part := range []string{
+		sourceURL,
+		ics.Text(e, ics.FieldSummary),
+		ics.Raw(e, ics.FieldDTStart),
+		ics.Text(e, ics.FieldLocation),
+	} {
+		h.Write([]byte(part))
+		h.Write([]byte{0x1f})
+	}
+	key := hex.EncodeToString(h.Sum(nil))[:32]
+	n := seq[key]
+	seq[key]++
+	uid := key + "@tidydav"
+	if n > 0 {
+		uid = key + "-" + strconv.Itoa(n) + "@tidydav"
+	}
+	return uid
+}
+
+// ensureDTStamp adds a DTSTAMP when missing (go-ical requires it on encode).
+// The value is derived from DTSTART so it is deterministic across fetches.
+func ensureDTStamp(e ical.Event) {
+	if e.Props.Get("DTSTAMP") != nil {
+		return
+	}
+	t, err := e.DateTimeStart(time.UTC)
+	if err != nil || t.IsZero() {
+		t = time.Unix(0, 0)
+	}
+	prop := ical.NewProp("DTSTAMP")
+	prop.SetDateTime(t.UTC())
+	e.Props.Set(prop)
 }
 
 func summarize(cal *ical.Calendar) []EventSummary {
