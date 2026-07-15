@@ -118,6 +118,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   go-ical refuses to encode such events. The merge step now synthesizes
   deterministic UIDs (stable across fetches, distinct for exact duplicates) and
   derives a DTSTAMP from DTSTART.
+- Event titles containing unescaped commas (RFC-invalid but common, e.g.
+  "Braune Tonne, Bioabfall") were truncated at the comma in the preview and in
+  rule matching. `ics.Text` now treats single-value text fields as one value
+  instead of a comma-separated list, while still resolving proper escapes.
 - Served calendars now include a `VTIMEZONE` definition for every `TZID` their
   events reference (RFC 5545 requirement; strict clients misread local times
   otherwise): upstream definitions are passed through, and zones introduced by

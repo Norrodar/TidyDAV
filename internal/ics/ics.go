@@ -39,16 +39,46 @@ func Serialize(w io.Writer, cal *ical.Calendar) error {
 	return nil
 }
 
-// Text returns the unescaped first text value of a field, or "" when absent.
+// Text returns the unescaped text value of a field, or "" when absent. Unlike
+// go-ical's Prop.Text it treats the value as a single text (not a
+// comma-separated list): real-world feeds often leave commas unescaped in
+// single-value fields like SUMMARY ("Braune Tonne, Bioabfall"), which
+// Prop.Text would silently truncate at the comma.
 func Text(e ical.Event, field string) string {
 	prop := e.Props.Get(field)
 	if prop == nil {
 		return ""
 	}
-	if v, err := prop.Text(); err == nil {
+	return unescapeText(prop.Value)
+}
+
+// unescapeText resolves RFC 5545 TEXT escapes (\\ \, \; \n) and keeps any
+// unescaped separator characters verbatim.
+func unescapeText(v string) string {
+	if !strings.ContainsRune(v, '\\') {
 		return v
 	}
-	return prop.Value
+	var sb strings.Builder
+	sb.Grow(len(v))
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if c != '\\' || i+1 >= len(v) {
+			sb.WriteByte(c)
+			continue
+		}
+		i++
+		switch n := v[i]; n {
+		case 'n', 'N':
+			sb.WriteByte('\n')
+		case '\\', ',', ';':
+			sb.WriteByte(n)
+		default:
+			// Unknown escape: keep it untouched rather than failing.
+			sb.WriteByte('\\')
+			sb.WriteByte(n)
+		}
+	}
+	return sb.String()
 }
 
 // Raw returns the raw (still-escaped) value of a field, or "" when absent.

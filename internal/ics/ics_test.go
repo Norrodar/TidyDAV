@@ -60,6 +60,36 @@ func TestParseAndFields(t *testing.T) {
 	}
 }
 
+// Real-world feeds often leave commas unescaped in single-value text fields
+// (RFC-invalid but common, e.g. "Braune Tonne, Bioabfall"). Text must keep the
+// whole value instead of truncating at the comma, while still resolving proper
+// escape sequences.
+func TestTextKeepsUnescapedCommas(t *testing.T) {
+	raw := strings.Join([]string{
+		"BEGIN:VCALENDAR",
+		"VERSION:2.0",
+		"BEGIN:VEVENT",
+		"UID:c@test",
+		"DTSTAMP:20260101T000000Z",
+		"SUMMARY:Braune Tonne, Bioabfall",
+		"DESCRIPTION:escaped\\, comma\\nand newline",
+		"END:VEVENT",
+		"END:VCALENDAR",
+		"",
+	}, "\r\n")
+	cal, err := Parse(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	e := cal.Events()[0]
+	if got := Text(e, FieldSummary); got != "Braune Tonne, Bioabfall" {
+		t.Errorf("SUMMARY = %q, want full value with comma", got)
+	}
+	if got := Text(e, FieldDescription); got != "escaped, comma\nand newline" {
+		t.Errorf("DESCRIPTION = %q, want unescaped comma and newline", got)
+	}
+}
+
 func TestSetAndRemove(t *testing.T) {
 	cal, err := Parse(strings.NewReader(sample()))
 	if err != nil {
