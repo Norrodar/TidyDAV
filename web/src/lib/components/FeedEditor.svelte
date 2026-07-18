@@ -308,6 +308,28 @@
     }
   }
 
+  // ── Test notifications ────────────────────────────────────────────────────
+  let testing = $state<string | null>(null);
+  async function sendTest(channel: 'webhook' | 'ntfy' | 'gotify') {
+    testing = channel;
+    try {
+      await api.notifyTest({
+        channel,
+        id: feed?.id,
+        webhookUrl: notifyWebhook || undefined,
+        ntfyServer: notifyNtfyServer || undefined,
+        ntfyTopic: notifyNtfyTopic || undefined,
+        gotifyServer: notifyGotifyServer || undefined,
+        gotifyToken: notifyGotifyToken || undefined
+      });
+      toasts.show(t('test_sent'), 'success');
+    } catch (e) {
+      toasts.show(e instanceof ApiError ? e.message : t('test_failed'), 'error');
+    } finally {
+      testing = null;
+    }
+  }
+
   async function runPreview() {
     const re = regexError();
     if (re) {
@@ -647,10 +669,15 @@
       </div>
 
       {#if webhookEnabled}
-        <label class="field">
-          <span>{t('webhook_url')}</span>
-          <input class="input" bind:value={notifyWebhook} placeholder="https://…" />
-        </label>
+        <div class="row wrap">
+          <label class="field grow">
+            <span>{t('webhook_url')}</span>
+            <input class="input" bind:value={notifyWebhook} placeholder="https://…" />
+          </label>
+          <button type="button" class="button button-secondary" onclick={() => sendTest('webhook')} disabled={testing !== null || !notifyWebhook}>
+            {testing === 'webhook' ? t('sending_test') : t('send_test')}
+          </button>
+        </div>
       {/if}
       {#if ntfyEnabled}
         <div class="row wrap">
@@ -662,6 +689,9 @@
             <span>{t('ntfy_topic')}</span>
             <input class="input" bind:value={notifyNtfyTopic} />
           </label>
+          <button type="button" class="button button-secondary" onclick={() => sendTest('ntfy')} disabled={testing !== null || !notifyNtfyServer || !notifyNtfyTopic}>
+            {testing === 'ntfy' ? t('sending_test') : t('send_test')}
+          </button>
         </div>
       {/if}
       {#if gotifyEnabled}
@@ -680,6 +710,9 @@
               placeholder={initial?.notifications.gotifyTokenSet ? t('unchanged') : ''}
             />
           </label>
+          <button type="button" class="button button-secondary" onclick={() => sendTest('gotify')} disabled={testing !== null || !notifyGotifyServer || (!notifyGotifyToken && !initial?.notifications.gotifyTokenSet)}>
+            {testing === 'gotify' ? t('sending_test') : t('send_test')}
+          </button>
         </div>
       {/if}
 

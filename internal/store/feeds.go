@@ -28,12 +28,14 @@ type Feed struct {
 	BasicAuthUser string
 	BasicAuthHash string          // bcrypt; empty means the endpoint is not basic-auth protected
 	Notifications json.RawMessage // notify.FeedNotifications as JSON
+	LastServedAt  time.Time       // last time a calendar client fetched /ics/<secret>
+	ServeCount    int64
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
 
 const feedColumns = "id, user_id, name, secret, sources, rules, ttl_seconds, " +
-	"basic_auth_user, basic_auth_hash, notifications, created_at, updated_at"
+	"basic_auth_user, basic_auth_hash, notifications, last_served_at, serve_count, created_at, updated_at"
 
 // CreateFeed inserts a new feed.
 func (s *Store) CreateFeed(ctx context.Context, f *Feed) error {
@@ -48,9 +50,10 @@ func (s *Store) CreateFeed(ctx context.Context, f *Feed) error {
 		return err
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO feeds (`+feedColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO feeds (`+feedColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		f.ID, f.UserID, f.Name, f.Secret, sources, rulesOrEmpty(f.Rules), f.TTLSeconds,
 		f.BasicAuthUser, f.BasicAuthHash, notifOrEmpty(f.Notifications),
+		formatTime(f.LastServedAt), f.ServeCount,
 		f.CreatedAt.Format(time.RFC3339), f.UpdatedAt.Format(time.RFC3339),
 	)
 	if err != nil {
@@ -78,6 +81,18 @@ func (s *Store) UpdateFeed(ctx context.Context, f *Feed) error {
 		return fmt.Errorf("update feed: %w", err)
 	}
 	return checkAffected(res)
+}
+
+// MarkFeedServed records that a calendar client fetched the feed just now.
+func (s *Store) MarkFeedServed(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE feeds SET last_served_at = ?, serve_count = serve_count + 1 WHERE id = ?",
+		time.Now().UTC().Format(time.RFC3339), id,
+	)
+	if err != nil {
+		return fmt.Errorf("mark feed served: %w", err)
+	}
+	return nil
 }
 
 // DeleteFeed removes a feed owned by userID. Returns ErrNotFound if no such feed.
@@ -153,12 +168,14 @@ func scanFeed(sc rowScanner) (*Feed, error) {
 	var (
 		f                     Feed
 		sources, rules, notif string
+		served                string
 		created, updated      string
 	)
 	if err := sc.Scan(&f.ID, &f.UserID, &f.Name, &f.Secret, &sources, &rules, &f.TTLSeconds,
-		&f.BasicAuthUser, &f.BasicAuthHash, &notif, &created, &updated); err != nil {
+		&f.BasicAuthUser, &f.BasicAuthHash, &notif, &served, &f.ServeCount, &created, &updated); err != nil {
 		return nil, err
 	}
+	f.LastServedAt = parseTime(served)
 	if sources != "" {
 		if err := json.Unmarshal([]byte(sources), &f.Sources); err != nil {
 			return nil, fmt.Errorf("decode feed sources: %w", err)

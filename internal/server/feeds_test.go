@@ -264,6 +264,85 @@ func TestCheckSource(t *testing.T) {
 	}
 }
 
+func TestNotifyTest(t *testing.T) {
+	var received int
+	sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			received++
+		}
+	}))
+	defer sink.Close()
+
+	srv := newTestServer(t)
+	cookies := register(t, srv, "n@example.com")
+
+	// Webhook delivery reaches the sink.
+	rec := do(t, srv, http.MethodPost, "/api/notify/test",
+		`{"channel":"webhook","webhookUrl":"`+sink.URL+`"}`, cookies)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("webhook test = %d: %s", rec.Code, rec.Body.String())
+	}
+	if received != 1 {
+		t.Errorf("sink received %d posts, want 1", received)
+	}
+
+	// Validation and auth.
+	if rec := do(t, srv, http.MethodPost, "/api/notify/test", `{"channel":"nope"}`, cookies); rec.Code != http.StatusBadRequest {
+		t.Errorf("bad channel = %d, want 400", rec.Code)
+	}
+	if rec := do(t, srv, http.MethodPost, "/api/notify/test", `{"channel":"webhook"}`, cookies); rec.Code != http.StatusBadRequest {
+		t.Errorf("missing url = %d, want 400", rec.Code)
+	}
+	if rec := do(t, srv, http.MethodPost, "/api/notify/test", `{"channel":"webhook","webhookUrl":"http://x"}`, nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("no-auth = %d, want 401", rec.Code)
+	}
+}
+
+func TestICSServeRecordsStats(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(icsUpstream))
+	}))
+	defer upstream.Close()
+
+	srv := newTestServer(t)
+	cookies := register(t, srv, "st@example.com")
+
+	rec := do(t, srv, http.MethodPost, "/api/feeds",
+		`{"name":"stats","sources":[{"url":"`+upstream.URL+`"}]}`, cookies)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create %d: %s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		ID     string `json:"id"`
+		Secret string `json:"secret"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if rec := do(t, srv, http.MethodGet, "/ics/"+created.Secret, "", nil); rec.Code != http.StatusOK {
+		t.Fatalf("serve ICS %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = do(t, srv, http.MethodGet, "/api/feeds/"+created.ID, "", cookies)
+	var got struct {
+		ServeCount   int64  `json:"serveCount"`
+		LastServedAt string `json:"lastServedAt"`
+		Sources      []struct {
+			LastFetchedAt string `json:"lastFetchedAt"`
+		} `json:"sources"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode feed: %v", err)
+	}
+	if got.ServeCount != 1 || got.LastServedAt == "" {
+		t.Errorf("serve stats = %+v, want count 1 with timestamp", got)
+	}
+	if len(got.Sources) != 1 || got.Sources[0].LastFetchedAt == "" {
+		t.Errorf("source health missing lastFetchedAt: %+v", got.Sources)
+	}
+}
+
 func TestAuditRequiresAdmin(t *testing.T) {
 	srv := newTestServer(t)
 	admin := register(t, srv, "admin@example.com") // first user => admin

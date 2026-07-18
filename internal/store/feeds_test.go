@@ -48,6 +48,21 @@ func TestFeedCRUD(t *testing.T) {
 		t.Fatalf("FeedsByUser = %v, %v", list, err)
 	}
 
+	// Subscriber stats: marking a serve bumps the counter and timestamp.
+	if !got.LastServedAt.IsZero() || got.ServeCount != 0 {
+		t.Errorf("fresh feed already has serve stats: %+v", got)
+	}
+	if err := st.MarkFeedServed(ctx, "feed-1"); err != nil {
+		t.Fatalf("MarkFeedServed: %v", err)
+	}
+	if err := st.MarkFeedServed(ctx, "feed-1"); err != nil {
+		t.Fatalf("MarkFeedServed: %v", err)
+	}
+	got, _ = st.FeedBySecret(ctx, "secret-abc")
+	if got.ServeCount != 2 || got.LastServedAt.IsZero() {
+		t.Errorf("serve stats not recorded: count=%d servedAt=%v", got.ServeCount, got.LastServedAt)
+	}
+
 	// Update.
 	f.Name = "Renamed"
 	if err := st.UpdateFeed(ctx, f); err != nil {

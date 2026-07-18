@@ -52,6 +52,35 @@
     return isNaN(d.getTime()) ? iso : d.toLocaleDateString(lang);
   }
 
+  function fmtDateTime(iso: string): string {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? iso : d.toLocaleString(lang);
+  }
+
+  // Source health: ok (fetched within 24h), stale (older) or never fetched.
+  type Health = 'ok' | 'stale' | 'never';
+  function sourceHealth(lastFetchedAt?: string): Health {
+    if (!lastFetchedAt) return 'never';
+    const d = new Date(lastFetchedAt);
+    if (isNaN(d.getTime())) return 'never';
+    return Date.now() - d.getTime() > 24 * 3600 * 1000 ? 'stale' : 'ok';
+  }
+  function healthTitle(lastFetchedAt?: string): string {
+    const h = sourceHealth(lastFetchedAt);
+    if (h === 'never') return t('health_never');
+    const time = fmtDateTime(lastFetchedAt!);
+    return h === 'ok' ? tf('health_ok', { time }) : tf('health_stale', { time });
+  }
+  function worstHealth(feed: Feed): Health {
+    let worst: Health = 'ok';
+    for (const s of feed.sources) {
+      const h = sourceHealth(s.lastFetchedAt);
+      if (h === 'stale') return 'stale';
+      if (h === 'never') worst = 'never';
+    }
+    return feed.sources.length ? worst : 'never';
+  }
+
   async function load() {
     loading = true;
     error = null;
@@ -116,11 +145,19 @@
       <div class="card feed-card">
         <div class="feed">
           <div class="info">
-            <h2>{feed.name}</h2>
+            <h2>
+              <span class="health {worstHealth(feed)}" title={feed.sources.map((s) => healthTitle(s.lastFetchedAt)).join('\n')}></span>
+              {feed.name}
+            </h2>
             <code class="url">{feed.icsUrl}</code>
             {#if feed.basicAuthEnabled}
               <p class="auth-hint">{t('basic_auth_hint')}</p>
             {/if}
+            <p class="stats">
+              {feed.lastServedAt
+                ? tf('client_last_fetch', { time: fmtDateTime(feed.lastServedAt), n: feed.serveCount })
+                : t('client_never')}
+            </p>
           </div>
           <div class="meta">
             <span class="badge">{tf('source_count', { n: feed.sources.length })}</span>
@@ -272,6 +309,30 @@
     margin: var(--space-1) 0 0;
     color: var(--text-tertiary);
     font-size: var(--text-xs);
+  }
+  .stats {
+    margin: var(--space-1) 0 0;
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+  }
+  .info h2 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .health {
+    flex-shrink: 0;
+    width: 9px;
+    height: 9px;
+    border-radius: var(--radius-full);
+    background: var(--success);
+    cursor: default;
+  }
+  .health.stale {
+    background: var(--warning);
+  }
+  .health.never {
+    background: var(--text-tertiary);
   }
   .meta {
     display: flex;

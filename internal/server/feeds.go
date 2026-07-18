@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Norrodar/TidyDAV/internal/feed"
+	"github.com/Norrodar/TidyDAV/internal/notify"
 	"github.com/Norrodar/TidyDAV/internal/pipeline"
 	"github.com/Norrodar/TidyDAV/internal/store"
 	"golang.org/x/crypto/bcrypt"
@@ -17,10 +19,11 @@ import (
 // ── DTOs (kept in sync with web/src/lib/api.ts) ─────────────────────────────
 
 type feedSourceDTO struct {
-	URL         string `json:"url"`
-	Username    string `json:"username,omitempty"`
-	Password    string `json:"password,omitempty"`    // write-only
-	HasPassword bool   `json:"hasPassword,omitempty"` // read-only
+	URL           string `json:"url"`
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`      // write-only
+	HasPassword   bool   `json:"hasPassword,omitempty"`   // read-only
+	LastFetchedAt string `json:"lastFetchedAt,omitempty"` // read-only: last successful upstream fetch
 }
 
 type feedRequest struct {
@@ -45,6 +48,8 @@ type feedResponse struct {
 	BasicAuthUser    string                `json:"basicAuthUser"`
 	BasicAuthEnabled bool                  `json:"basicAuthEnabled"`
 	Notifications    notificationsResponse `json:"notifications"`
+	LastServedAt     string                `json:"lastServedAt"`
+	ServeCount       int64                 `json:"serveCount"`
 	CreatedAt        string                `json:"createdAt"`
 	UpdatedAt        string                `json:"updatedAt"`
 }
@@ -68,7 +73,7 @@ func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]feedResponse, 0, len(feeds))
 	for _, f := range feeds {
-		out = append(out, s.toFeedResponse(f))
+		out = append(out, s.toFeedResponse(r.Context(), f))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -123,7 +128,7 @@ func (s *Server) handleCreateFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.app.Audit.Record(r.Context(), u, "feed.create", f.ID, f.Name)
-	writeJSON(w, http.StatusCreated, s.toFeedResponse(f))
+	writeJSON(w, http.StatusCreated, s.toFeedResponse(r.Context(), f))
 }
 
 func (s *Server) handleGetFeed(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +140,7 @@ func (s *Server) handleGetFeed(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, s.toFeedResponse(f))
+	writeJSON(w, http.StatusOK, s.toFeedResponse(r.Context(), f))
 }
 
 func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +185,7 @@ func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.app.Audit.Record(r.Context(), u, "feed.update", existing.ID, existing.Name)
-	writeJSON(w, http.StatusOK, s.toFeedResponse(existing))
+	writeJSON(w, http.StatusOK, s.toFeedResponse(r.Context(), existing))
 }
 
 func (s *Server) handleDeleteFeed(w http.ResponseWriter, r *http.Request) {
@@ -308,6 +313,80 @@ func (s *Server) handleCheckSource(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sourceCheckResponse{OK: true, Events: events})
 }
 
+// ── Test notification ────────────────────────────────────────────────────────
+
+type notifyTestRequest struct {
+	ID           string `json:"id,omitempty"` // saved feed: reuse its stored Gotify token
+	Channel      string `json:"channel"`      // webhook | ntfy | gotify
+	WebhookURL   string `json:"webhookUrl"`
+	NtfyServer   string `json:"ntfyServer"`
+	NtfyTopic    string `json:"ntfyTopic"`
+	GotifyServer string `json:"gotifyServer"`
+	GotifyToken  string `json:"gotifyToken"`
+}
+
+// handleNotifyTest sends a single test notification over one channel so the
+// user can verify the configuration without waiting for a real rule match.
+func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var req notifyTestRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+
+	var n notify.Notifier
+	switch req.Channel {
+	case "webhook":
+		if strings.TrimSpace(req.WebhookURL) == "" {
+			writeError(w, http.StatusBadRequest, "webhook URL is required")
+			return
+		}
+		n = notify.NewWebhookNotifier(strings.TrimSpace(req.WebhookURL))
+	case "ntfy":
+		if req.NtfyServer == "" || req.NtfyTopic == "" {
+			writeError(w, http.StatusBadRequest, "ntfy server and topic are required")
+			return
+		}
+		n = notify.NewNtfyNotifier(req.NtfyServer, req.NtfyTopic)
+	case "gotify":
+		token := req.GotifyToken
+		// The token is write-only in the API: reuse the stored one when testing
+		// a saved feed without re-entering it.
+		if token == "" && req.ID != "" {
+			if existing, err := s.app.Store.FeedByID(r.Context(), req.ID); err == nil && existing.UserID == u.ID {
+				var fn notify.FeedNotifications
+				if json.Unmarshal(existing.Notifications, &fn) == nil {
+					token = fn.GotifyToken
+				}
+			}
+		}
+		if req.GotifyServer == "" || token == "" {
+			writeError(w, http.StatusBadRequest, "gotify server and token are required")
+			return
+		}
+		n = notify.NewGotifyNotifier(req.GotifyServer, token)
+	default:
+		writeError(w, http.StatusBadRequest, "channel must be webhook, ntfy or gotify")
+		return
+	}
+
+	ev := notify.Event{
+		Feed:    "TidyDAV",
+		Rule:    "test",
+		Summary: "TidyDAV test notification",
+		Message: "If you can read this, the channel is configured correctly.",
+		Time:    time.Now().UTC(),
+	}
+	if err := n.Notify(r.Context(), ev); err != nil {
+		writeError(w, http.StatusBadGateway, "test failed: "+err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) (*store.User, bool) {
@@ -378,14 +457,23 @@ func (s *Server) ownedFeed(w http.ResponseWriter, r *http.Request, u *store.User
 	return f, true
 }
 
-func (s *Server) toFeedResponse(f *store.Feed) feedResponse {
+func (s *Server) toFeedResponse(ctx context.Context, f *store.Feed) feedResponse {
 	sources := make([]feedSourceDTO, 0, len(f.Sources))
 	for _, src := range f.Sources {
-		sources = append(sources, feedSourceDTO{
+		dto := feedSourceDTO{
 			URL:         src.URL,
 			Username:    src.Username,
 			HasPassword: src.Password != "",
-		})
+		}
+		// Health hint: when the cache last saw a good copy of this source.
+		if fetched, err := s.app.Store.CachedFeedFetchedAt(ctx, src.URL); err == nil && !fetched.IsZero() {
+			dto.LastFetchedAt = fetched.UTC().Format(time.RFC3339)
+		}
+		sources = append(sources, dto)
+	}
+	lastServed := ""
+	if !f.LastServedAt.IsZero() {
+		lastServed = f.LastServedAt.UTC().Format(time.RFC3339)
 	}
 	return feedResponse{
 		ID:               f.ID,
@@ -398,6 +486,8 @@ func (s *Server) toFeedResponse(f *store.Feed) feedResponse {
 		BasicAuthUser:    f.BasicAuthUser,
 		BasicAuthEnabled: f.BasicAuthHash != "",
 		Notifications:    toNotificationsResponse(f.Notifications),
+		LastServedAt:     lastServed,
+		ServeCount:       f.ServeCount,
 		CreatedAt:        f.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:        f.UpdatedAt.Format(time.RFC3339),
 	}

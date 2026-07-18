@@ -83,6 +83,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   optional date range, and a three-column A/B/result merge preview.
 - Internationalised UI (English + German, auto-detected from the browser) across the
   calendars and sync pages; the "Feeds" area is now labelled "Calendars"/"Kalender".
+- Test notifications: a "Send test" button per channel (webhook / ntfy / Gotify) in the
+  calendar editor fires one immediately (`POST /api/notify/test`); saved feeds reuse
+  their stored Gotify token.
+- Source health in the calendar list: a colored dot per calendar (green = every source
+  fetched within 24h, orange = stale, gray = never) with per-source details in the
+  tooltip, backed by a `lastFetchedAt` field on each source.
+- Subscriber stats (migration `010`): every `/ics/<secret>` fetch records
+  `last_served_at`/`serve_count`; the list shows when a calendar client last pulled the
+  feed and how often.
 - Quick preview on the list pages: every saved calendar gets a "Preview" button that
   expands an inline before/after view (`GET /api/feeds/{id}/preview`), and every saved
   sync job — calendars and contacts alike — gets one showing Server A, Server B and the

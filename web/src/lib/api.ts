@@ -81,6 +81,7 @@ export interface FeedSource {
   username?: string;
   password?: string; // write-only
   hasPassword?: boolean; // read-only
+  lastFetchedAt?: string; // read-only: last successful upstream fetch
 }
 
 export type RuleType = 'filter' | 'dedup' | 'rename' | 'strip' | 'timezone' | 'expire';
@@ -129,8 +130,20 @@ export interface Feed {
   basicAuthUser: string;
   basicAuthEnabled: boolean;
   notifications: NotificationsResponse;
+  lastServedAt: string;
+  serveCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface NotifyTestInput {
+  channel: 'webhook' | 'ntfy' | 'gotify';
+  id?: string; // saved feed: reuse its stored Gotify token
+  webhookUrl?: string;
+  ntfyServer?: string;
+  ntfyTopic?: string;
+  gotifyServer?: string;
+  gotifyToken?: string;
 }
 
 export interface FeedInput {
@@ -273,6 +286,8 @@ export const api = {
     checkSource: (input: { url: string; username?: string; password?: string; id?: string }) =>
       request<SourceCheckResult>('/api/feeds/source-check', jsonBody('POST', input))
   },
+
+  notifyTest: (input: NotifyTestInput) => request<void>('/api/notify/test', jsonBody('POST', input)),
 
   audit: {
     list: () => request<AuditEntry[]>('/api/audit')

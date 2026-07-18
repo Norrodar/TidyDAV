@@ -398,6 +398,11 @@ func (s *Server) handleICS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(body)
+
+	// Subscriber stats: record that a client fetched this calendar.
+	if err := s.app.Store.MarkFeedServed(r.Context(), f.ID); err != nil {
+		s.app.Log.Warn("mark feed served", "feed", f.ID, "error", err)
+	}
 }
 
 func validBasicAuth(r *http.Request, f *store.Feed) bool {

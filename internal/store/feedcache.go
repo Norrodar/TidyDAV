@@ -36,6 +36,21 @@ func (s *Store) GetCachedFeed(ctx context.Context, url string) (*CachedFeed, err
 	return &cf, nil
 }
 
+// CachedFeedFetchedAt returns when the cached copy for url was last fetched
+// successfully, or the zero time when the URL has never been fetched.
+func (s *Store) CachedFeedFetchedAt(ctx context.Context, url string) (time.Time, error) {
+	row := s.db.QueryRowContext(ctx, "SELECT fetched_at FROM feed_cache WHERE url = ?", url)
+	var fetched string
+	err := row.Scan(&fetched)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("query feed cache fetched_at: %w", err)
+	}
+	return parseTime(fetched), nil
+}
+
 // PutCachedFeed inserts or updates the cached copy for a URL.
 func (s *Store) PutCachedFeed(ctx context.Context, cf *CachedFeed) error {
 	if cf.FetchedAt.IsZero() {

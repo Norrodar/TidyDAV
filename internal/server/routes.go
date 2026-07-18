@@ -17,6 +17,7 @@ func (s *Server) routes(mux *http.ServeMux) error {
 	mux.HandleFunc("POST /api/feeds", s.handleCreateFeed)
 	mux.HandleFunc("POST /api/feeds/preview", s.handlePreviewFeed)
 	mux.HandleFunc("POST /api/feeds/source-check", s.handleCheckSource)
+	mux.HandleFunc("POST /api/notify/test", s.handleNotifyTest)
 	mux.HandleFunc("GET /api/feeds/{id}", s.handleGetFeed)
 	mux.HandleFunc("GET /api/feeds/{id}/preview", s.handlePreviewSavedFeed)
 	mux.HandleFunc("PUT /api/feeds/{id}", s.handleUpdateFeed)
