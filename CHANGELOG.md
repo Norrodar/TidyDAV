@@ -83,6 +83,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   optional date range, and a three-column A/B/result merge preview.
 - Internationalised UI (English + German, auto-detected from the browser) across the
   calendars and sync pages; the "Feeds" area is now labelled "Calendars"/"Kalender".
+- Quick preview on the list pages: every saved calendar gets a "Preview" button that
+  expands an inline before/after view (`GET /api/feeds/{id}/preview`), and every saved
+  sync job — calendars and contacts alike — gets one showing Server A, Server B and the
+  simulated result (`GET /api/sync/{id}/preview`, optional `?week=`). Long lists are
+  capped to the next upcoming entries with an "… and N more" note.
 - Drag-and-drop rule reordering with keyboard-accessible up/down buttons; the stored
   order is the execution order, so the pipeline respects it.
 - Per-source validation (`POST /api/feeds/source-check`): the editor shows a ✓/✕ next to

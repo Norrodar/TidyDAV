@@ -3,6 +3,7 @@ package server_test
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -109,5 +110,44 @@ func TestSyncWindowAndPreviewValidation(t *testing.T) {
 	// Preview requires auth.
 	if rec := do(t, srv, http.MethodPost, "/api/sync/preview", `{}`, nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("no-auth preview = %d, want 401", rec.Code)
+	}
+}
+
+func TestPreviewSavedSyncJob(t *testing.T) {
+	// A non-DAV upstream: collection listing fails fast, so the handler must
+	// answer 502 instead of hanging or succeeding.
+	notDAV := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "nope", http.StatusInternalServerError)
+	}))
+	defer notDAV.Close()
+
+	srv := newTestServer(t)
+	cookies := register(t, srv, "sv@example.com")
+
+	body := `{"name":"Cal","kind":"caldav","direction":"a-to-b",` +
+		`"aUrl":"` + notDAV.URL + `/a/","bUrl":"` + notDAV.URL + `/b/","intervalSeconds":900,"enabled":true}`
+	rec := do(t, srv, http.MethodPost, "/api/sync", body, cookies)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create %d: %s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if rec := do(t, srv, http.MethodGet, "/api/sync/"+created.ID+"/preview", "", cookies); rec.Code != http.StatusBadGateway {
+		t.Errorf("saved preview against non-DAV upstream = %d, want 502 (%s)", rec.Code, rec.Body.String())
+	}
+	if rec := do(t, srv, http.MethodGet, "/api/sync/"+created.ID+"/preview?week=nonsense", "", cookies); rec.Code != http.StatusBadRequest {
+		t.Errorf("bad week = %d, want 400", rec.Code)
+	}
+	intruder := register(t, srv, "svi@example.com")
+	if rec := do(t, srv, http.MethodGet, "/api/sync/"+created.ID+"/preview", "", intruder); rec.Code != http.StatusNotFound {
+		t.Errorf("intruder saved preview = %d, want 404", rec.Code)
+	}
+	if rec := do(t, srv, http.MethodGet, "/api/sync/"+created.ID+"/preview", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("no-auth saved preview = %d, want 401", rec.Code)
 	}
 }

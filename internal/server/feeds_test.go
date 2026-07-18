@@ -164,6 +164,52 @@ func TestFeedPreview(t *testing.T) {
 	}
 }
 
+func TestPreviewSavedFeed(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(icsUpstream))
+	}))
+	defer upstream.Close()
+
+	srv := newTestServer(t)
+	cookies := register(t, srv, "sp@example.com")
+
+	body := `{"name":"sp","sources":[{"url":"` + upstream.URL + `"}],"rules":[{"type":"strip","fields":["DESCRIPTION"]}]}`
+	rec := do(t, srv, http.MethodPost, "/api/feeds", body, cookies)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create %d: %s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	rec = do(t, srv, http.MethodGet, "/api/feeds/"+created.ID+"/preview", "", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("saved preview %d: %s", rec.Code, rec.Body.String())
+	}
+	var prev struct {
+		Original    []map[string]any `json:"original"`
+		Transformed []map[string]any `json:"transformed"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &prev); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if len(prev.Original) != 1 || prev.Transformed[0]["description"] != "" {
+		t.Errorf("unexpected preview: %s", rec.Body.String())
+	}
+
+	// Ownership isolation and auth.
+	intruder := register(t, srv, "spi@example.com")
+	if rec := do(t, srv, http.MethodGet, "/api/feeds/"+created.ID+"/preview", "", intruder); rec.Code != http.StatusNotFound {
+		t.Errorf("intruder saved preview %d, want 404", rec.Code)
+	}
+	if rec := do(t, srv, http.MethodGet, "/api/feeds/"+created.ID+"/preview", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("no-auth saved preview %d, want 401", rec.Code)
+	}
+}
+
 func TestCheckSource(t *testing.T) {
 	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(icsUpstream))

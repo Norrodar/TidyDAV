@@ -238,6 +238,26 @@ func (s *Server) handlePreviewFeed(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, previewResponse{Original: original, Transformed: transformed})
 }
 
+// handlePreviewSavedFeed previews a stored feed as-is (no request body needed):
+// the list pages use it for a quick "what does this calendar show" check.
+func (s *Server) handlePreviewSavedFeed(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	f, ok := s.ownedFeed(w, r, u)
+	if !ok {
+		return
+	}
+	original, transformed, err := s.app.Feed.Preview(r.Context(), f)
+	if err != nil {
+		s.app.Log.Warn("saved feed preview failed", "feed", f.ID, "error", err)
+		writeError(w, http.StatusBadGateway, "preview failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, previewResponse{Original: original, Transformed: transformed})
+}
+
 type sourceCheckRequest struct {
 	ID       string `json:"id,omitempty"` // reuse stored password for a saved feed's source
 	URL      string `json:"url"`

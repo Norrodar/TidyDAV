@@ -18,6 +18,7 @@ func (s *Server) routes(mux *http.ServeMux) error {
 	mux.HandleFunc("POST /api/feeds/preview", s.handlePreviewFeed)
 	mux.HandleFunc("POST /api/feeds/source-check", s.handleCheckSource)
 	mux.HandleFunc("GET /api/feeds/{id}", s.handleGetFeed)
+	mux.HandleFunc("GET /api/feeds/{id}/preview", s.handlePreviewSavedFeed)
 	mux.HandleFunc("PUT /api/feeds/{id}", s.handleUpdateFeed)
 	mux.HandleFunc("DELETE /api/feeds/{id}", s.handleDeleteFeed)
 	mux.HandleFunc("GET /api/audit", s.handleListAudit)
@@ -27,6 +28,7 @@ func (s *Server) routes(mux *http.ServeMux) error {
 	mux.HandleFunc("POST /api/sync/preview", s.handleSyncPreview)
 	mux.HandleFunc("POST /api/sync/{id}/run", s.handleRunSyncJob)
 	mux.HandleFunc("GET /api/sync/{id}", s.handleGetSyncJob)
+	mux.HandleFunc("GET /api/sync/{id}/preview", s.handlePreviewSavedSyncJob)
 	mux.HandleFunc("PUT /api/sync/{id}", s.handleUpdateSyncJob)
 	mux.HandleFunc("DELETE /api/sync/{id}", s.handleDeleteSyncJob)
 

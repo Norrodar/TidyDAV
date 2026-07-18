@@ -268,6 +268,49 @@ func (s *Server) handleSyncPreview(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, syncPreviewResponse{A: aOut, B: bOut, Merged: merged})
 }
 
+// handlePreviewSavedSyncJob previews a stored job as-is: both servers plus the
+// simulated merge. An optional ?week=YYYY-MM-DD narrows CalDAV to that week;
+// otherwise the job's stored date window (if any) applies.
+func (s *Server) handlePreviewSavedSyncJob(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	job, ok := s.ownedSyncJob(w, r, u)
+	if !ok {
+		return
+	}
+
+	opts := dav.Options{Direction: dav.Direction(job.Direction), UID: dav.CalendarUID}
+	if job.Kind == "carddav" {
+		opts.UID = dav.ContactUID
+	} else {
+		if week := strings.TrimSpace(r.URL.Query().Get("week")); week != "" {
+			start, _, err := dav.ParseWindow(week, "")
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid week: "+err.Error())
+				return
+			}
+			opts.WindowStart, opts.WindowEnd = start, start.Add(7*24*time.Hour)
+		} else if ws, we, err := dav.ParseWindow(job.WindowStart, job.WindowEnd); err == nil {
+			opts.WindowStart, opts.WindowEnd = ws, we
+		}
+	}
+
+	a, b, err := buildPreviewCollections(job.Kind, job.AURL, job.AUsername, job.APassword, job.BURL, job.BUsername, job.BPassword)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	aOut, bOut, merged, err := dav.PreviewMerge(r.Context(), a, b, opts, job.Kind)
+	if err != nil {
+		s.app.Log.Warn("saved sync preview failed", "job", job.ID, "error", err)
+		writeError(w, http.StatusBadGateway, "preview failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, syncPreviewResponse{A: aOut, B: bOut, Merged: merged})
+}
+
 func buildPreviewCollections(kind, aURL, aUser, aPass, bURL, bUser, bPass string) (dav.Collection, dav.Collection, error) {
 	if kind == "carddav" {
 		a, err := dav.NewCardDAVCollection(strings.TrimSpace(aURL), aUser, aPass)

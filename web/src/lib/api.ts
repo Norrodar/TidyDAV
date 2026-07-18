@@ -269,6 +269,7 @@ export const api = {
     remove: (id: string) => request<void>(`/api/feeds/${id}`, { method: 'DELETE' }),
     preview: (input: FeedInput, id?: string) =>
       request<PreviewResult>('/api/feeds/preview', jsonBody('POST', id ? { ...input, id } : input)),
+    previewSaved: (id: string) => request<PreviewResult>(`/api/feeds/${id}/preview`),
     checkSource: (input: { url: string; username?: string; password?: string; id?: string }) =>
       request<SourceCheckResult>('/api/feeds/source-check', jsonBody('POST', input))
   },
@@ -285,6 +286,8 @@ export const api = {
     remove: (id: string) => request<void>(`/api/sync/${id}`, { method: 'DELETE' }),
     run: (id: string) => request<SyncJob>(`/api/sync/${id}/run`, { method: 'POST' }),
     preview: (input: SyncPreviewInput, id?: string) =>
-      request<SyncPreviewResult>('/api/sync/preview', jsonBody('POST', id ? { ...input, id } : input))
+      request<SyncPreviewResult>('/api/sync/preview', jsonBody('POST', id ? { ...input, id } : input)),
+    previewSaved: (id: string, week?: string) =>
+      request<SyncPreviewResult>(`/api/sync/${id}/preview${buildQuery({ week })}`)
   }
 };
