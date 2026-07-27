@@ -92,6 +92,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Subscriber stats (migration `010`): every `/ics/<secret>` fetch records
   `last_served_at`/`serve_count`; the list shows when a calendar client last pulled the
   feed and how often.
+- Reminder rule: attaches a `VALARM` to every event so the calendar app itself
+  notifies ahead of time (presets from "at the event" to "2 days before"; 6 hours
+  before an all-day event lands at 18:00 the evening before — the useful setting for
+  bin-collection calendars). Any alarm the source carried is replaced, so no client
+  fires twice.
 - Quick preview on the list pages: every saved calendar gets a "Preview" button that
   expands an inline before/after view (`GET /api/feeds/{id}/preview`), and every saved
   sync job — calendars and contacts alike — gets one showing Server A, Server B and the
@@ -127,6 +132,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Security:** the upstream cache was keyed by URL alone, so a copy fetched with
+  credentials could be served to — or overwritten by — a request that supplied none.
+  On a multi-user instance that exposed another user's private calendar to anyone who
+  knew the URL. Entries are now keyed by URL *and* a hash of the credentials
+  (migration `011`, which drops the old unattributable rows).
+- **Security:** `TIDYDAV_ALLOW_PRIVATE_TARGETS=false` only hardened the feed proxy.
+  DAV endpoints (sync and its preview) and notification targets could still reach
+  internal hosts and reflect the result back. All outbound clients now share one
+  policy (`internal/outbound`), which also covers the CGNAT range.
+- **Security:** a Gotify delivery failure logged the full URL — including the token —
+  because Go's transport errors embed the request URL. Errors are now redacted.
+- **Security:** every `/ics/<secret>` request logged the secret, the feed's only
+  credential, on every calendar-client poll. The path is now masked in request logs.
+- Expiry dropped recurring events whose series started long ago but still recurs —
+  weekly meetings and yearly birthdays vanished from any calendar with an expire rule.
+  Recurrence is now evaluated (`RRULE` `UNTIL`, `RDATE`), and series without a knowable
+  end are always kept.
+- Merging discarded recurrence overrides: a moved or cancelled instance shares the
+  series UID, so clients showed the instance at its old time and resurrected cancelled
+  ones. The dedup identity now spans `UID` + `RECURRENCE-ID`.
+- A filter rule with an empty pattern matched every event, silently blanking the whole
+  calendar; it is rejected now, and the editor validates every rule before sending.
+- One event in a timezone Go does not know (Outlook's "W. Europe Standard Time") made
+  the timezone rule fail the entire render, so `/ics` answered 502. Such values are now
+  left untouched and the rest of the feed is served.
+- Sync refuses to run when one side suddenly lists nothing although the previous run
+  saw a full collection — a moved collection URL used to wipe the other side.
+- A manually triggered sync ran in the request context: closing the browser tab
+  cancelled it mid-write, leaving items created but no state recorded (duplicates on
+  the next run). Runs now outlive the request, and a job can no longer be executed by
+  the scheduler and by hand at the same time.
+- Notifications were marked as sent before delivery, so an unreachable target lost them
+  permanently; and a long-lived event was announced again every 30 days when its ledger
+  entry aged out. Delivery is now confirmed first and repeat sightings refresh the entry.
+- The calendar editor could not switch source credentials off or clear a stored Gotify
+  token, and editing an authenticated source's URL silently dropped its password.
+- "Keep a cached copy" did not actually disable caching, and its checkbox did not
+  survive a round-trip when the interval was exactly 15 minutes.
+- Enabling password protection without a username saved silently and left the ICS link
+  public; both sides now reject it.
+- The generated `VTIMEZONE` scan was unbounded: a single event dated far in the future
+  cost hundreds of thousands of iterations per request. The window is clamped.
+- Cached upstream bodies (up to 25 MiB each) of deleted feeds were never pruned.
+- Session probes that fail because the backend is unreachable no longer look like being
+  signed out; the UI says so instead of bouncing to the login page.
+- Register, password-reset and audit pages were untranslated, and a failed sign-in read
+  "Anmelden failed" in German. `npm run lint` passes again.
 - Feeds whose upstream events lack `UID`/`DTSTAMP` (e.g. municipal waste
   calendars) failed to serve with a 502 ("feed could not be rendered") because
   go-ical refuses to encode such events. The merge step now synthesizes

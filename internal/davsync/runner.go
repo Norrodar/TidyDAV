@@ -5,23 +5,57 @@ package davsync
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/Norrodar/TidyDAV/internal/dav"
 	"github.com/Norrodar/TidyDAV/internal/store"
 )
 
+// ErrAlreadyRunning reports that a previous run of the same job is still in
+// flight.
+var ErrAlreadyRunning = errors.New("davsync: job is already running")
+
 // Runner executes due sync jobs.
 type Runner struct {
-	store *store.Store
-	log   *slog.Logger
+	store        *store.Store
+	log          *slog.Logger
+	allowPrivate bool
+
+	mu      sync.Mutex
+	running map[string]bool
 }
 
-// New creates a Runner.
-func New(st *store.Store, log *slog.Logger) *Runner {
-	return &Runner{store: st, log: log}
+// New creates a Runner. allowPrivate mirrors TIDYDAV_ALLOW_PRIVATE_TARGETS and
+// gates whether DAV endpoints may resolve to non-public addresses.
+func New(st *store.Store, log *slog.Logger, allowPrivate bool) *Runner {
+	return &Runner{store: st, log: log, allowPrivate: allowPrivate, running: map[string]bool{}}
+}
+
+// acquire marks a job as running, reporting false if it already was. Without
+// it a manual run and the scheduler could sync one job concurrently: both would
+// start from the same state snapshot, duplicate every create and race to
+// persist the outcome.
+func (r *Runner) acquire(id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.running[id] {
+		return false
+	}
+	if r.running == nil {
+		r.running = map[string]bool{}
+	}
+	r.running[id] = true
+	return true
+}
+
+func (r *Runner) release(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.running, id)
 }
 
 // Run executes every enabled job whose interval has elapsed since its last run.
@@ -51,13 +85,37 @@ func due(job *store.SyncJob, now time.Time) bool {
 }
 
 // RunOne executes a single job immediately, ignoring its interval. Used by the
-// manual-run API.
-func (r *Runner) RunOne(ctx context.Context, job *store.SyncJob) {
-	r.runJob(ctx, job)
+// manual-run API; it returns ErrAlreadyRunning when the job is in flight.
+//
+// The run deliberately outlives the caller's context: a sync that is cancelled
+// midway (browser tab closed, proxy timeout) would leave items written to the
+// destination but no state recorded, so the next run would create them again.
+func (r *Runner) RunOne(ctx context.Context, job *store.SyncJob) error {
+	if !r.acquire(job.ID) {
+		return ErrAlreadyRunning
+	}
+	defer r.release(job.ID)
+
+	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), manualRunTimeout)
+	defer cancel()
+	r.runLocked(runCtx, job)
+	return nil
 }
 
+// manualRunTimeout bounds a manually triggered run.
+const manualRunTimeout = 10 * time.Minute
+
 func (r *Runner) runJob(ctx context.Context, job *store.SyncJob) {
-	a, b, opts, err := buildSync(job)
+	if !r.acquire(job.ID) {
+		r.log.Info("skipping sync job: still running", "job", job.ID, "name", job.Name)
+		return
+	}
+	defer r.release(job.ID)
+	r.runLocked(ctx, job)
+}
+
+func (r *Runner) runLocked(ctx context.Context, job *store.SyncJob) {
+	a, b, opts, err := buildSync(job, r.allowPrivate)
 	if err != nil {
 		r.finish(ctx, job, nil, "config error: "+err.Error())
 		return
@@ -80,6 +138,10 @@ func (r *Runner) runJob(ctx context.Context, job *store.SyncJob) {
 }
 
 func (r *Runner) finish(ctx context.Context, job *store.SyncJob, state *dav.State, status string) {
+	// Persist even if the run's context was cancelled: losing the state after
+	// items were already written is what causes duplicates on the next run.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
 	var raw json.RawMessage
 	if state != nil {
 		if b, err := json.Marshal(state); err == nil {
@@ -93,7 +155,7 @@ func (r *Runner) finish(ctx context.Context, job *store.SyncJob, state *dav.Stat
 }
 
 // buildSync resolves a job into two collections and sync options.
-func buildSync(job *store.SyncJob) (dav.Collection, dav.Collection, dav.Options, error) {
+func buildSync(job *store.SyncJob, allowPrivate bool) (dav.Collection, dav.Collection, dav.Options, error) {
 	var opts dav.Options
 	switch dav.Direction(job.Direction) {
 	case dav.AToB, dav.BToA, dav.Bidirectional:
@@ -116,18 +178,18 @@ func buildSync(job *store.SyncJob) (dav.Collection, dav.Collection, dav.Options,
 		if opts.WindowStart, opts.WindowEnd, err = dav.ParseWindow(job.WindowStart, job.WindowEnd); err != nil {
 			return nil, nil, opts, err
 		}
-		if a, err = dav.NewCalDAVCollection(job.AURL, job.AUsername, job.APassword); err != nil {
+		if a, err = dav.NewCalDAVCollection(job.AURL, job.AUsername, job.APassword, allowPrivate); err != nil {
 			return nil, nil, opts, err
 		}
-		if b, err = dav.NewCalDAVCollection(job.BURL, job.BUsername, job.BPassword); err != nil {
+		if b, err = dav.NewCalDAVCollection(job.BURL, job.BUsername, job.BPassword, allowPrivate); err != nil {
 			return nil, nil, opts, err
 		}
 	case "carddav":
 		opts.UID, opts.Modified, opts.HrefSuffix = dav.ContactUID, dav.ContactModified, ".vcf"
-		if a, err = dav.NewCardDAVCollection(job.AURL, job.AUsername, job.APassword); err != nil {
+		if a, err = dav.NewCardDAVCollection(job.AURL, job.AUsername, job.APassword, allowPrivate); err != nil {
 			return nil, nil, opts, err
 		}
-		if b, err = dav.NewCardDAVCollection(job.BURL, job.BUsername, job.BPassword); err != nil {
+		if b, err = dav.NewCardDAVCollection(job.BURL, job.BUsername, job.BPassword, allowPrivate); err != nil {
 			return nil, nil, opts, err
 		}
 	default:

@@ -218,6 +218,157 @@ func TestExpire(t *testing.T) {
 	assertSummaries(t, cal, "New", "Undated")
 }
 
+// Recurring events must survive expiry when they still have occurrences ahead:
+// a weekly meeting or yearly birthday started years ago, but recurs forever.
+func TestExpireKeepsRecurringEvents(t *testing.T) {
+	cal := mustCal(t,
+		event("weekly", "SUMMARY:Weekly", "DTSTART:20200106T090000Z", "DTEND:20200106T100000Z", "RRULE:FREQ=WEEKLY"),
+		event("birthday", "SUMMARY:Birthday", "DTSTART;VALUE=DATE:20100315", "RRULE:FREQ=YEARLY"),
+		event("until-future", "SUMMARY:UntilFuture", "DTSTART:20200106T090000Z", "DTEND:20200106T100000Z",
+			"RRULE:FREQ=WEEKLY;UNTIL=20301231T000000Z"),
+		event("counted", "SUMMARY:Counted", "DTSTART:20200106T090000Z", "DTEND:20200106T100000Z",
+			"RRULE:FREQ=WEEKLY;COUNT=10"),
+		event("rdate", "SUMMARY:RDate", "DTSTART:20200106T090000Z", "DTEND:20200106T100000Z",
+			"RDATE:20301106T090000Z"),
+		event("ended", "SUMMARY:Ended", "DTSTART:20200106T090000Z", "DTEND:20200106T100000Z",
+			"RRULE:FREQ=WEEKLY;UNTIL=20200331T000000Z"),
+		event("plain-old", "SUMMARY:PlainOld", "DTSTART:20200106T090000Z", "DTEND:20200106T100000Z"),
+	)
+	r, err := NewExpireRule(30)
+	if err != nil {
+		t.Fatalf("NewExpireRule: %v", err)
+	}
+	r.now = func() time.Time { return time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC) }
+	if err := r.Apply(cal); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	// Series that ended in 2020 and the plain old event go; everything with
+	// occurrences still ahead (or an unknowable end) stays.
+	assertSummaries(t, cal, "Weekly", "Birthday", "UntilFuture", "Counted", "RDate")
+}
+
+// An empty pattern matches everything: as a blacklist it would silently blank
+// the whole calendar, so building the rule must fail instead.
+func TestFilterRejectsEmptyPattern(t *testing.T) {
+	for _, mode := range []FilterMode{FilterBlacklist, FilterWhitelist} {
+		if _, err := NewFilterRule(mode, MatchSubstring, "", nil); err == nil {
+			t.Errorf("%s filter with empty pattern was accepted", mode)
+		}
+		if _, err := NewFilterRule(mode, MatchSubstring, "   ", nil); err == nil {
+			t.Errorf("%s filter with blank pattern was accepted", mode)
+		}
+	}
+}
+
+// A single event in a timezone Go does not know (e.g. Outlook's Windows zone
+// names) must not take the whole feed down.
+func TestTimezoneSkipsUnknownZoneInsteadOfFailing(t *testing.T) {
+	cal := mustCal(t,
+		event("win", "SUMMARY:Outlook", "DTSTART;TZID=W. Europe Standard Time:20260702T090000"),
+		event("ok", "SUMMARY:Convertible", "DTSTART:20260702T090000Z"),
+	)
+	r, err := NewTimezoneRule("Europe/Berlin", "")
+	if err != nil {
+		t.Fatalf("NewTimezoneRule: %v", err)
+	}
+	if err := r.Apply(cal); err != nil {
+		t.Fatalf("Apply must tolerate unknown zones, got: %v", err)
+	}
+	if got := len(cal.Events()); got != 2 {
+		t.Fatalf("event count = %d, want 2 (nothing dropped)", got)
+	}
+	// The convertible event was moved, the unknown one kept verbatim.
+	if got := ics.Raw(cal.Events()[1], ics.FieldDTStart); !strings.Contains(got, "20260702T110000") {
+		t.Errorf("convertible DTSTART = %q, want 11:00 Berlin", got)
+	}
+	if got := ics.Raw(cal.Events()[0], ics.FieldDTStart); got != "20260702T090000" {
+		t.Errorf("unknown-zone DTSTART = %q, want the original value", got)
+	}
+}
+
+func TestAlarmAddsReminder(t *testing.T) {
+	cal := mustCal(t,
+		event("a", "SUMMARY:Braune Tonne", "DTSTART;VALUE=DATE:20260702"),
+		// An upstream alarm must be replaced, not doubled.
+		event("b", "SUMMARY:Meeting", "DTSTART:20260702T090000Z",
+			"BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:old", "TRIGGER:-PT5M", "END:VALARM"),
+	)
+	r, err := NewAlarmRule(360, "") // 6h before midnight = 18:00 the evening before
+	if err != nil {
+		t.Fatalf("NewAlarmRule: %v", err)
+	}
+	if err := r.Apply(cal); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	var buf strings.Builder
+	if err := ics.Serialize(&buf, cal); err != nil {
+		t.Fatalf("serialize: %v", err)
+	}
+	out := buf.String()
+	if n := strings.Count(out, "BEGIN:VALARM"); n != 2 {
+		t.Fatalf("VALARM count = %d, want 2 (one per event)", n)
+	}
+	if n := strings.Count(out, "TRIGGER:-PT6H"); n != 2 {
+		t.Errorf("expected both alarms at -PT6H:\n%s", out)
+	}
+	if strings.Contains(out, "TRIGGER:-PT5M") {
+		t.Errorf("upstream alarm was not replaced:\n%s", out)
+	}
+	// The description defaults to the event's own summary.
+	if !strings.Contains(out, "DESCRIPTION:Braune Tonne") {
+		t.Errorf("alarm description should default to the summary:\n%s", out)
+	}
+}
+
+func TestAlarmCustomTextAndDurations(t *testing.T) {
+	cal := mustCal(t, event("a", "SUMMARY:X", "DTSTART:20260702T090000Z"))
+	r, err := NewAlarmRule(1560, "Tonne rausstellen") // 26h -> -P1DT2H
+	if err != nil {
+		t.Fatalf("NewAlarmRule: %v", err)
+	}
+	if err := r.Apply(cal); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	var buf strings.Builder
+	if err := ics.Serialize(&buf, cal); err != nil {
+		t.Fatalf("serialize: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "TRIGGER:-P1DT2H") {
+		t.Errorf("26h lead should render as -P1DT2H:\n%s", out)
+	}
+	if !strings.Contains(out, "DESCRIPTION:Tonne rausstellen") {
+		t.Errorf("custom alarm text missing:\n%s", out)
+	}
+}
+
+func TestAlarmDurationFormats(t *testing.T) {
+	tests := []struct {
+		minutes int
+		want    string
+	}{
+		{0, "PT0S"},
+		{15, "-PT15M"},
+		{60, "-PT1H"},
+		{90, "-PT1H30M"},
+		{360, "-PT6H"},
+		{1440, "-P1D"},
+		{1560, "-P1DT2H"},
+	}
+	for _, tt := range tests {
+		if got := negativeDuration(time.Duration(tt.minutes) * time.Minute); got != tt.want {
+			t.Errorf("negativeDuration(%dm) = %q, want %q", tt.minutes, got, tt.want)
+		}
+	}
+}
+
+func TestAlarmRejectsNegativeLead(t *testing.T) {
+	if _, err := NewAlarmRule(-5, ""); err == nil {
+		t.Error("expected error for negative lead time")
+	}
+}
+
 func TestExpireInvalidDays(t *testing.T) {
 	if _, err := NewExpireRule(0); err == nil {
 		t.Fatal("expected error for non-positive days")

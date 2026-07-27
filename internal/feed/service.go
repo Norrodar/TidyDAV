@@ -160,6 +160,10 @@ func (s *Service) merge(ctx context.Context, f *store.Feed) (*ical.Calendar, map
 		}
 		for _, e := range cal.Events() {
 			uid := ics.Text(e, "UID")
+			// A recurrence override (a moved or cancelled instance) shares its
+			// UID with the series master and is told apart by RECURRENCE-ID.
+			// Both must survive the merge, so the dedup identity spans the two.
+			dedupID := uid + "\x00" + ics.Raw(e, ics.FieldRecurrenceID)
 			if uid == "" {
 				// Some real-world feeds omit UID, which go-ical requires on
 				// encode. Synthesize a deterministic one so serialization works
@@ -169,10 +173,10 @@ func (s *Service) merge(ctx context.Context, f *store.Feed) (*ical.Calendar, map
 				uid = syntheticUID(src.URL, e, uidSeq)
 				ics.SetText(e, "UID", uid)
 			} else {
-				if _, dup := seenUID[uid]; dup {
+				if _, dup := seenUID[dedupID]; dup {
 					continue
 				}
-				seenUID[uid] = struct{}{}
+				seenUID[dedupID] = struct{}{}
 			}
 			ensureDTStamp(e)
 			merged.Children = append(merged.Children, e.Component)
@@ -233,7 +237,15 @@ func referencedTZIDs(cal *ical.Calendar) []string {
 
 // eventWindow returns the [min, max] DTSTART across events padded by a year on
 // each side, so generated VTIMEZONEs cover every referenced occurrence.
+//
+// The span is clamped: VTIMEZONE generation scans it hour by hour, and a single
+// event dated far in the future (year 2099 shows up in birthday feeds and in
+// broken exports) would otherwise cost hundreds of thousands of iterations on
+// every request. Observances outside the clamp are of no practical use anyway.
 func eventWindow(cal *ical.Calendar) (time.Time, time.Time) {
+	now := time.Now().UTC()
+	minLo, maxHi := now.AddDate(-tzWindowPastYears, 0, 0), now.AddDate(tzWindowFutureYears, 0, 0)
+
 	var lo, hi time.Time
 	for _, e := range cal.Events() {
 		t, err := e.DateTimeStart(time.UTC)
@@ -248,11 +260,27 @@ func eventWindow(cal *ical.Calendar) (time.Time, time.Time) {
 		}
 	}
 	if lo.IsZero() {
-		now := time.Now().UTC()
 		return now.AddDate(-1, 0, 0), now.AddDate(1, 0, 0)
 	}
-	return lo.AddDate(-1, 0, 0), hi.AddDate(1, 0, 0)
+
+	lo, hi = lo.AddDate(-1, 0, 0), hi.AddDate(1, 0, 0)
+	if lo.Before(minLo) {
+		lo = minLo
+	}
+	if hi.After(maxHi) {
+		hi = maxHi
+	}
+	if hi.Before(lo) {
+		hi = lo.AddDate(1, 0, 0)
+	}
+	return lo, hi
 }
+
+// Bounds for generated VTIMEZONE observances, relative to now.
+const (
+	tzWindowPastYears   = 3
+	tzWindowFutureYears = 6
+)
 
 // syntheticUID derives a stable UID for an event that has none: a hash of the
 // source URL and the event's identifying fields, with a sequence suffix so

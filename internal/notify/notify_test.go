@@ -27,7 +27,7 @@ func TestWebhookNotify(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewWebhookNotifier(srv.URL).Notify(context.Background(), sampleEvent); err != nil {
+	if err := NewWebhookNotifier(srv.URL, true).Notify(context.Background(), sampleEvent); err != nil {
 		t.Fatalf("Notify: %v", err)
 	}
 	if got.Feed != "Müll" || got.Rule != "filter" {
@@ -47,7 +47,7 @@ func TestNtfyNotify(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewNtfyNotifier(srv.URL, "mytopic").Notify(context.Background(), sampleEvent); err != nil {
+	if err := NewNtfyNotifier(srv.URL, "mytopic", true).Notify(context.Background(), sampleEvent); err != nil {
 		t.Fatalf("Notify: %v", err)
 	}
 	if path != "/mytopic" {
@@ -73,7 +73,7 @@ func TestGotifyNotify(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewGotifyNotifier(srv.URL, "tok123").Notify(context.Background(), sampleEvent); err != nil {
+	if err := NewGotifyNotifier(srv.URL, "tok123", true).Notify(context.Background(), sampleEvent); err != nil {
 		t.Fatalf("Notify: %v", err)
 	}
 	if path != "/message" || token != "tok123" {
@@ -89,7 +89,7 @@ func TestNotifyNon2xx(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	if err := NewWebhookNotifier(srv.URL).Notify(context.Background(), sampleEvent); err == nil {
+	if err := NewWebhookNotifier(srv.URL, true).Notify(context.Background(), sampleEvent); err == nil {
 		t.Fatal("expected error on 500 response")
 	}
 }
@@ -106,8 +106,8 @@ func TestDispatcherToleratesFailure(t *testing.T) {
 	defer bad.Close()
 
 	d := NewDispatcher(testLogger())
-	d.Add(NewWebhookNotifier(bad.URL))
-	d.Add(NewWebhookNotifier(good.URL))
+	d.Add(NewWebhookNotifier(bad.URL, true))
+	d.Add(NewWebhookNotifier(good.URL, true))
 	if d.Len() != 2 {
 		t.Fatalf("Len = %d, want 2", d.Len())
 	}
@@ -124,11 +124,11 @@ func TestNewFromConfig(t *testing.T) {
 		NtfyTopic:    "t",
 		GotifyServer: "https://gotify",
 		GotifyToken:  "tok",
-	}, testLogger())
+	}, testLogger(), true)
 	if d.Len() != 3 {
 		t.Errorf("Len = %d, want 3", d.Len())
 	}
-	if NewFromConfig(Config{NtfyServer: "https://ntfy.sh"}, testLogger()).Len() != 0 {
+	if NewFromConfig(Config{NtfyServer: "https://ntfy.sh"}, testLogger(), true).Len() != 0 {
 		t.Error("ntfy without topic should not register")
 	}
 }
@@ -139,7 +139,7 @@ func TestErrorDoesNotLeakToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := NewGotifyNotifier(srv.URL, "supersecret").Notify(context.Background(), sampleEvent)
+	err := NewGotifyNotifier(srv.URL, "supersecret", true).Notify(context.Background(), sampleEvent)
 	if err == nil {
 		t.Fatal("expected error")
 	}

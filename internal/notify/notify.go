@@ -6,12 +6,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Norrodar/TidyDAV/internal/outbound"
 )
 
 // Event describes what to notify about.
@@ -29,7 +32,12 @@ type Notifier interface {
 	Kind() string
 }
 
-func newClient() *http.Client { return &http.Client{Timeout: 10 * time.Second} }
+// newClient builds the HTTP client used for notification delivery. allowPrivate
+// mirrors TIDYDAV_ALLOW_PRIVATE_TARGETS: notification URLs are user-supplied
+// and are therefore an SSRF vector like feed sources.
+func newClient(allowPrivate bool) *http.Client {
+	return outbound.Client(10*time.Second, allowPrivate)
+}
 
 func post(ctx context.Context, client *http.Client, url, contentType string, body []byte, headers map[string]string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
@@ -44,7 +52,10 @@ func post(ctx context.Context, client *http.Client, url, contentType string, bod
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		// A transport error is a *url.Error carrying the full URL — which for
+		// Gotify holds the token in its query string. Report the redacted form
+		// so credentials never reach logs or API responses.
+		return fmt.Errorf("notify: post to %s failed: %w", redactURL(url), redactError(err, url))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -64,6 +75,22 @@ func redactURL(raw string) string {
 	return u.Redacted()
 }
 
+// redactError removes the raw URL from an error's message. Go's transport
+// errors embed the request URL verbatim, which leaks the Gotify token.
+func redactError(err error, raw string) error {
+	msg := err.Error()
+	if raw == "" || !strings.Contains(msg, raw) {
+		// Unwrap the URL error so its own formatting (which re-adds the URL)
+		// is not reused.
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			return uerr.Err
+		}
+		return err
+	}
+	return errors.New(strings.ReplaceAll(msg, raw, redactURL(raw)))
+}
+
 func title(ev Event) string {
 	if ev.Summary != "" {
 		return ev.Summary
@@ -80,8 +107,8 @@ type WebhookNotifier struct {
 }
 
 // NewWebhookNotifier creates a webhook notifier.
-func NewWebhookNotifier(url string) *WebhookNotifier {
-	return &WebhookNotifier{url: url, client: newClient()}
+func NewWebhookNotifier(url string, allowPrivate bool) *WebhookNotifier {
+	return &WebhookNotifier{url: url, client: newClient(allowPrivate)}
 }
 
 // Kind implements Notifier.
@@ -105,8 +132,8 @@ type NtfyNotifier struct {
 }
 
 // NewNtfyNotifier creates an ntfy notifier for server (e.g. https://ntfy.sh) and topic.
-func NewNtfyNotifier(server, topic string) *NtfyNotifier {
-	return &NtfyNotifier{url: strings.TrimRight(server, "/") + "/" + topic, client: newClient()}
+func NewNtfyNotifier(server, topic string, allowPrivate bool) *NtfyNotifier {
+	return &NtfyNotifier{url: strings.TrimRight(server, "/") + "/" + topic, client: newClient(allowPrivate)}
 }
 
 // Kind implements Notifier.
@@ -126,8 +153,8 @@ type GotifyNotifier struct {
 }
 
 // NewGotifyNotifier creates a Gotify notifier for server and application token.
-func NewGotifyNotifier(server, token string) *GotifyNotifier {
-	return &GotifyNotifier{url: strings.TrimRight(server, "/") + "/message?token=" + token, client: newClient()}
+func NewGotifyNotifier(server, token string, allowPrivate bool) *GotifyNotifier {
+	return &GotifyNotifier{url: strings.TrimRight(server, "/") + "/message?token=" + token, client: newClient(allowPrivate)}
 }
 
 // Kind implements Notifier.
@@ -162,13 +189,25 @@ func (d *Dispatcher) Add(n Notifier) { d.notifiers = append(d.notifiers, n) }
 // Len returns the number of registered notifiers.
 func (d *Dispatcher) Len() int { return len(d.notifiers) }
 
-// Dispatch sends ev to every notifier, logging failures.
-func (d *Dispatcher) Dispatch(ctx context.Context, ev Event) {
+// Dispatch sends ev to every notifier, logging individual failures so one bad
+// target never blocks the others. It reports an error only when no target could
+// be reached at all, which lets the caller retry later instead of recording the
+// event as announced.
+func (d *Dispatcher) Dispatch(ctx context.Context, ev Event) error {
+	var delivered int
+	var lastErr error
 	for _, n := range d.notifiers {
 		if err := n.Notify(ctx, ev); err != nil {
 			d.log.Warn("notification failed", "kind", n.Kind(), "error", err)
+			lastErr = err
+			continue
 		}
+		delivered++
 	}
+	if delivered == 0 && lastErr != nil {
+		return lastErr
+	}
+	return nil
 }
 
 // Config configures which notifiers a dispatcher should contain.
@@ -181,16 +220,16 @@ type Config struct {
 }
 
 // NewFromConfig builds a dispatcher from configuration.
-func NewFromConfig(cfg Config, log *slog.Logger) *Dispatcher {
+func NewFromConfig(cfg Config, log *slog.Logger, allowPrivate bool) *Dispatcher {
 	d := NewDispatcher(log)
 	if cfg.WebhookURL != "" {
-		d.Add(NewWebhookNotifier(cfg.WebhookURL))
+		d.Add(NewWebhookNotifier(cfg.WebhookURL, allowPrivate))
 	}
 	if cfg.NtfyServer != "" && cfg.NtfyTopic != "" {
-		d.Add(NewNtfyNotifier(cfg.NtfyServer, cfg.NtfyTopic))
+		d.Add(NewNtfyNotifier(cfg.NtfyServer, cfg.NtfyTopic, allowPrivate))
 	}
 	if cfg.GotifyServer != "" && cfg.GotifyToken != "" {
-		d.Add(NewGotifyNotifier(cfg.GotifyServer, cfg.GotifyToken))
+		d.Add(NewGotifyNotifier(cfg.GotifyServer, cfg.GotifyToken, allowPrivate))
 	}
 	return d
 }
@@ -239,6 +278,6 @@ func (f FeedNotifications) Triggered(ruleType string) bool {
 }
 
 // Dispatcher builds a dispatcher for this feed's configured targets.
-func (f FeedNotifications) Dispatcher(log *slog.Logger) *Dispatcher {
-	return NewFromConfig(f.config(), log)
+func (f FeedNotifications) Dispatcher(log *slog.Logger, allowPrivate bool) *Dispatcher {
+	return NewFromConfig(f.config(), log, allowPrivate)
 }

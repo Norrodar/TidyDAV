@@ -17,7 +17,7 @@
       session.apply(await api.login(email, password));
       await goto('/');
     } catch (err) {
-      error = err instanceof ApiError ? err.message : t('sign_in') + ' failed';
+      error = err instanceof ApiError ? err.message : t('sign_in_failed');
     } finally {
       submitting = false;
     }

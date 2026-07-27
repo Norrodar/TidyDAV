@@ -54,13 +54,16 @@ export function buildQuery(
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
+    ...init,
     credentials: 'same-origin',
-    headers: { Accept: 'application/json', ...(init?.headers ?? {}) },
-    ...init
+    // Merged last: spreading `init` after this would drop the defaults.
+    headers: { Accept: 'application/json', ...(init?.headers ?? {}) }
   });
 
   if (!res.ok) {
-    let message = res.statusText;
+    // HTTP/2 has no status text, and plain-text 404s carry no JSON body, so
+    // fall back to something the user can act on.
+    let message = res.statusText || `HTTP ${res.status}`;
     try {
       const body = (await res.json()) as { error?: string };
       if (body && typeof body.error === 'string') message = body.error;
@@ -81,10 +84,11 @@ export interface FeedSource {
   username?: string;
   password?: string; // write-only
   hasPassword?: boolean; // read-only
+  clearPassword?: boolean; // write-only: drop the stored password
   lastFetchedAt?: string; // read-only: last successful upstream fetch
 }
 
-export type RuleType = 'filter' | 'dedup' | 'rename' | 'strip' | 'timezone' | 'expire';
+export type RuleType = 'filter' | 'dedup' | 'rename' | 'strip' | 'timezone' | 'expire' | 'alarm';
 
 export interface RuleConfig {
   type: RuleType;
@@ -99,6 +103,8 @@ export interface RuleConfig {
   target?: string;
   defaultTz?: string;
   days?: number;
+  minutesBefore?: number;
+  alarmText?: string;
 }
 
 export interface NotificationsInput {
@@ -116,7 +122,7 @@ export interface NotificationsResponse {
   ntfyTopic: string;
   gotifyServer: string;
   gotifyTokenSet: boolean;
-  triggers: string[];
+  triggers: string[] | null; // the API omits an empty list
 }
 
 export interface Feed {
@@ -242,6 +248,7 @@ export interface SyncPreviewResult {
 export interface SyncPreviewInput {
   kind: SyncKind;
   direction: SyncDirection;
+  conflict?: SyncConflict;
   aUrl: string;
   aUsername?: string;
   aPassword?: string;
@@ -278,7 +285,8 @@ export const api = {
     list: () => request<Feed[]>('/api/feeds'),
     get: (id: string) => request<Feed>(`/api/feeds/${id}`),
     create: (input: FeedInput) => request<Feed>('/api/feeds', jsonBody('POST', input)),
-    update: (id: string, input: FeedInput) => request<Feed>(`/api/feeds/${id}`, jsonBody('PUT', input)),
+    update: (id: string, input: FeedInput) =>
+      request<Feed>(`/api/feeds/${id}`, jsonBody('PUT', input)),
     remove: (id: string) => request<void>(`/api/feeds/${id}`, { method: 'DELETE' }),
     preview: (input: FeedInput, id?: string) =>
       request<PreviewResult>('/api/feeds/preview', jsonBody('POST', id ? { ...input, id } : input)),
@@ -287,7 +295,8 @@ export const api = {
       request<SourceCheckResult>('/api/feeds/source-check', jsonBody('POST', input))
   },
 
-  notifyTest: (input: NotifyTestInput) => request<void>('/api/notify/test', jsonBody('POST', input)),
+  notifyTest: (input: NotifyTestInput) =>
+    request<void>('/api/notify/test', jsonBody('POST', input)),
 
   audit: {
     list: () => request<AuditEntry[]>('/api/audit')
@@ -297,11 +306,15 @@ export const api = {
     list: () => request<SyncJob[]>('/api/sync'),
     get: (id: string) => request<SyncJob>(`/api/sync/${id}`),
     create: (input: SyncJobInput) => request<SyncJob>('/api/sync', jsonBody('POST', input)),
-    update: (id: string, input: SyncJobInput) => request<SyncJob>(`/api/sync/${id}`, jsonBody('PUT', input)),
+    update: (id: string, input: SyncJobInput) =>
+      request<SyncJob>(`/api/sync/${id}`, jsonBody('PUT', input)),
     remove: (id: string) => request<void>(`/api/sync/${id}`, { method: 'DELETE' }),
     run: (id: string) => request<SyncJob>(`/api/sync/${id}/run`, { method: 'POST' }),
     preview: (input: SyncPreviewInput, id?: string) =>
-      request<SyncPreviewResult>('/api/sync/preview', jsonBody('POST', id ? { ...input, id } : input)),
+      request<SyncPreviewResult>(
+        '/api/sync/preview',
+        jsonBody('POST', id ? { ...input, id } : input)
+      ),
     previewSaved: (id: string, week?: string) =>
       request<SyncPreviewResult>(`/api/sync/${id}/preview${buildQuery({ week })}`)
   }

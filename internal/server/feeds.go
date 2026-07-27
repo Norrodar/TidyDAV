@@ -23,6 +23,7 @@ type feedSourceDTO struct {
 	Username      string `json:"username,omitempty"`
 	Password      string `json:"password,omitempty"`      // write-only
 	HasPassword   bool   `json:"hasPassword,omitempty"`   // read-only
+	ClearPassword bool   `json:"clearPassword,omitempty"` // write-only: drop the stored password
 	LastFetchedAt string `json:"lastFetchedAt,omitempty"` // read-only: last successful upstream fetch
 }
 
@@ -166,7 +167,7 @@ func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sources := toStoreSources(req.Sources)
-	preserveSourceSecrets(sources, existing)
+	preserveSourceSecrets(sources, req.Sources, existing)
 
 	existing.Name = strings.TrimSpace(req.Name)
 	existing.Sources = sources
@@ -230,7 +231,7 @@ func (s *Server) handlePreviewFeed(w http.ResponseWriter, r *http.Request) {
 	// write-only and not resent by the UI).
 	if req.ID != "" {
 		if existing, err := s.app.Store.FeedByID(r.Context(), req.ID); err == nil && existing.UserID == u.ID {
-			preserveSourceSecrets(f.Sources, existing)
+			preserveSourceSecrets(f.Sources, req.Sources, existing)
 		}
 	}
 
@@ -344,13 +345,13 @@ func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "webhook URL is required")
 			return
 		}
-		n = notify.NewWebhookNotifier(strings.TrimSpace(req.WebhookURL))
+		n = notify.NewWebhookNotifier(strings.TrimSpace(req.WebhookURL), s.app.Config.AllowPrivateTargets)
 	case "ntfy":
 		if req.NtfyServer == "" || req.NtfyTopic == "" {
 			writeError(w, http.StatusBadRequest, "ntfy server and topic are required")
 			return
 		}
-		n = notify.NewNtfyNotifier(req.NtfyServer, req.NtfyTopic)
+		n = notify.NewNtfyNotifier(req.NtfyServer, req.NtfyTopic, s.app.Config.AllowPrivateTargets)
 	case "gotify":
 		token := req.GotifyToken
 		// The token is write-only in the API: reuse the stored one when testing
@@ -367,7 +368,7 @@ func (s *Server) handleNotifyTest(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "gotify server and token are required")
 			return
 		}
-		n = notify.NewGotifyNotifier(req.GotifyServer, token)
+		n = notify.NewGotifyNotifier(req.GotifyServer, token, s.app.Config.AllowPrivateTargets)
 	default:
 		writeError(w, http.StatusBadRequest, "channel must be webhook, ntfy or gotify")
 		return
@@ -527,6 +528,11 @@ func validateRules(w http.ResponseWriter, raw json.RawMessage) bool {
 func resolveBasicAuth(user, password string, existing *store.Feed) (resolvedUser, hash string, err error) {
 	user = strings.TrimSpace(user)
 	if user == "" {
+		// A password without a username used to disable protection silently,
+		// leaving the ICS link public while the UI reported success.
+		if password != "" {
+			return "", "", errors.New("basic auth needs a username as well as a password")
+		}
 		return "", "", nil // basic auth disabled
 	}
 	if password != "" {
@@ -542,21 +548,37 @@ func resolveBasicAuth(user, password string, existing *store.Feed) (resolvedUser
 	return "", "", errors.New("basic auth password is required")
 }
 
-func preserveSourceSecrets(sources []store.FeedSource, existing *store.Feed) {
+// preserveSourceSecrets restores stored source passwords the request left out,
+// since they are write-only and the editor never receives them.
+//
+// A source is matched by URL first and by position second: editing a typo in an
+// authenticated source's URL would otherwise silently drop its password, and
+// the feed would then serve without that source. Entries whose DTO asked for a
+// clear are skipped, which is the only way to remove a stored password.
+func preserveSourceSecrets(sources []store.FeedSource, dtos []feedSourceDTO, existing *store.Feed) {
 	if existing == nil {
 		return
 	}
-	old := make(map[string]string, len(existing.Sources))
+	byURL := make(map[string]string, len(existing.Sources))
 	for _, src := range existing.Sources {
 		if src.Password != "" {
-			old[src.URL] = src.Password
+			byURL[src.URL] = src.Password
 		}
 	}
 	for i := range sources {
-		if sources[i].Password == "" {
-			if pw, ok := old[sources[i].URL]; ok {
-				sources[i].Password = pw
-			}
+		if i < len(dtos) && dtos[i].ClearPassword {
+			continue
+		}
+		if sources[i].Password != "" {
+			continue
+		}
+		if pw, ok := byURL[sources[i].URL]; ok {
+			sources[i].Password = pw
+			continue
+		}
+		// URL changed: fall back to the source that used to occupy this slot.
+		if i < len(existing.Sources) && existing.Sources[i].Password != "" {
+			sources[i].Password = existing.Sources[i].Password
 		}
 	}
 }

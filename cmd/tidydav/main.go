@@ -21,6 +21,10 @@ import (
 	"github.com/Norrodar/TidyDAV/internal/server"
 )
 
+// feedCacheRetention is how long an unrefreshed cached upstream body is kept.
+// Anything older belongs to a source nobody fetches any more.
+const feedCacheRetention = 30 * 24 * time.Hour
+
 // version is overridden at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
@@ -72,10 +76,17 @@ func run() error {
 			if _, err := a.Store.DeleteExpiredPasswordResets(ctx, time.Now()); err != nil {
 				return err
 			}
+			// Cached bodies of removed feeds/sources would otherwise grow the
+			// database forever (up to 25 MiB each).
+			if n, err := a.Store.DeleteCachedFeedsBefore(ctx, time.Now().Add(-feedCacheRetention)); err != nil {
+				return err
+			} else if n > 0 {
+				log.Info("pruned stale feed cache entries", "count", n)
+			}
 			return nil
 		},
 	})
-	notif := notifier.New(a.Store, a.Feed, log)
+	notif := notifier.New(a.Store, a.Feed, log, cfg.AllowPrivateTargets)
 	sched.Add(scheduler.Job{Name: "notifications", Interval: cfg.NotifyInterval, Run: notif.Run})
 	sched.Add(scheduler.Job{Name: "dav-sync", Interval: cfg.SyncTick, Run: a.Sync.Run})
 	sched.Start(ctx)

@@ -1,7 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { api, ApiError, type SyncJob, type SyncPreviewResult, type SyncPreviewEntry } from '$lib/api';
+  import {
+    api,
+    ApiError,
+    type SyncJob,
+    type SyncPreviewResult,
+    type SyncPreviewEntry
+  } from '$lib/api';
   import { toasts } from '$lib/state/toasts.svelte';
   import { confirmDialog } from '$lib/state/confirm.svelte';
   import { t, tf, lang } from '$lib/i18n';
@@ -13,7 +19,11 @@
   let running = $state<string | null>(null);
 
   // Per-job quick preview state, keyed by job id.
-  type PreviewState = { status: 'loading' | 'ok' | 'error'; result?: SyncPreviewResult; message?: string };
+  type PreviewState = {
+    status: 'loading' | 'ok' | 'error';
+    result?: SyncPreviewResult;
+    message?: string;
+  };
   let previews = $state<Record<string, PreviewState | undefined>>({});
 
   const PREVIEW_LIMIT = 8;
@@ -55,7 +65,7 @@
         await goto('/login');
         return;
       }
-      error = e instanceof Error ? e.message : 'Failed to load sync jobs';
+      error = e instanceof Error ? e.message : t('load_failed');
     } finally {
       loading = false;
     }
@@ -90,7 +100,8 @@
   }
 
   async function remove(job: SyncJob) {
-    if (!(await confirmDialog.ask(tf('delete_sync_confirm', { name: job.name }), t('delete')))) return;
+    if (!(await confirmDialog.ask(tf('delete_sync_confirm', { name: job.name }), t('delete'))))
+      return;
     try {
       await api.sync.remove(job.id);
       jobs = jobs.filter((j) => j.id !== job.id);
@@ -121,7 +132,10 @@
       <div class="card job-card">
         <div class="job">
           <div class="info">
-            <h2>{job.name} {#if !job.enabled}<span class="badge">{t('disabled')}</span>{/if}</h2>
+            <h2>
+              {job.name}
+              {#if !job.enabled}<span class="badge">{t('disabled')}</span>{/if}
+            </h2>
             <div class="meta">
               <span class="badge">{job.kind}</span>
               <span class="badge">{job.direction}</span>
@@ -129,18 +143,25 @@
             </div>
             <div class="run">
               <span class="last-run">{t('last_run')}: {formatLastRun(job.lastRunAt)}</span>
-              {#if job.lastStatus}<span class={statusClass(job.lastStatus)}>{job.lastStatus}</span>{/if}
+              {#if job.lastStatus}<span class={statusClass(job.lastStatus)}>{job.lastStatus}</span
+                >{/if}
             </div>
           </div>
           <div class="row-actions">
             <button class="button button-secondary" onclick={() => togglePreview(job)}>
               {previews[job.id] ? t('hide_preview') : t('preview')}
             </button>
-            <button class="button button-secondary" onclick={() => run(job)} disabled={running === job.id}>
+            <button
+              class="button button-secondary"
+              onclick={() => run(job)}
+              disabled={running === job.id}
+            >
               {running === job.id ? t('running') : t('run_now')}
             </button>
             <a class="button button-secondary" href={`/sync/${job.id}`}>{t('edit')}</a>
-            <button class="button button-secondary danger" onclick={() => remove(job)}>{t('delete')}</button>
+            <button class="button button-secondary danger" onclick={() => remove(job)}
+              >{t('delete')}</button
+            >
           </div>
         </div>
 
@@ -164,7 +185,9 @@
                       {/each}
                     </ul>
                     {#if p.result.a.length > PREVIEW_LIMIT}
-                      <p class="muted">{tf('preview_more', { n: p.result.a.length - PREVIEW_LIMIT })}</p>
+                      <p class="muted">
+                        {tf('preview_more', { n: p.result.a.length - PREVIEW_LIMIT })}
+                      </p>
                     {/if}
                   {/if}
                 </div>
@@ -179,12 +202,17 @@
                       {/each}
                     </ul>
                     {#if p.result.b.length > PREVIEW_LIMIT}
-                      <p class="muted">{tf('preview_more', { n: p.result.b.length - PREVIEW_LIMIT })}</p>
+                      <p class="muted">
+                        {tf('preview_more', { n: p.result.b.length - PREVIEW_LIMIT })}
+                      </p>
                     {/if}
                   {/if}
                 </div>
                 <div class="col result">
-                  <h3>{t('result')} ({t(flowKey(job.direction))}) <span class="badge badge-ok">{p.result.merged.length}</span></h3>
+                  <h3>
+                    {t('result')} ({t(flowKey(job.direction))})
+                    <span class="badge badge-ok">{p.result.merged.length}</span>
+                  </h3>
                   {#if p.result.merged.length === 0}
                     <p class="muted">{t('no_entries')}</p>
                   {:else}
@@ -194,7 +222,9 @@
                       {/each}
                     </ul>
                     {#if p.result.merged.length > PREVIEW_LIMIT}
-                      <p class="muted">{tf('preview_more', { n: p.result.merged.length - PREVIEW_LIMIT })}</p>
+                      <p class="muted">
+                        {tf('preview_more', { n: p.result.merged.length - PREVIEW_LIMIT })}
+                      </p>
                     {/if}
                   {/if}
                 </div>

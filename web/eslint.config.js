@@ -19,6 +19,16 @@ export default ts.config(
     }
   },
   {
+    rules: {
+      // Placeholder bindings (e.g. an {#each} that only repeats markup) are
+      // named with a leading underscore on purpose.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }
+      ]
+    }
+  },
+  {
     ignores: ['build/', '.svelte-kit/', 'dist/', 'node_modules/']
   }
 );

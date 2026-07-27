@@ -113,6 +113,12 @@ func syncBidirectional(ctx context.Context, a, b Collection, state *State, opts 
 	if err != nil {
 		return res, fmt.Errorf("list B: %w", err)
 	}
+	if err := guardVanished("A", len(aList), len(aKnown)); err != nil {
+		return res, err
+	}
+	if err := guardVanished("B", len(bList), len(bKnown)); err != nil {
+		return res, err
+	}
 	filtered := make(map[string]bool) // out-of-window UIDs: skipped, protected from deletion
 	aSide, err := resolveSide(ctx, a, aList, aKnown, opts, filtered)
 	if err != nil {

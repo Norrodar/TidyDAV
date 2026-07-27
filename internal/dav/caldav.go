@@ -4,20 +4,22 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/Norrodar/TidyDAV/internal/ics"
+	"github.com/Norrodar/TidyDAV/internal/outbound"
 	"github.com/emersion/go-webdav"
 	"github.com/emersion/go-webdav/caldav"
 )
 
 // davHTTPClient builds an HTTP client with a timeout (so a hung server cannot
-// block the sync runner), optionally adding HTTP Basic Auth.
-func davHTTPClient(username, password string) webdav.HTTPClient {
-	base := &http.Client{Timeout: 60 * time.Second}
+// block the sync runner), optionally adding HTTP Basic Auth. allowPrivate
+// mirrors TIDYDAV_ALLOW_PRIVATE_TARGETS: when false, non-public destinations
+// are refused (a DAV endpoint is user-supplied, so it is an SSRF vector too).
+func davHTTPClient(username, password string, allowPrivate bool) webdav.HTTPClient {
+	base := outbound.Client(60*time.Second, allowPrivate)
 	if username != "" {
 		return webdav.HTTPClientWithBasicAuth(base, username, password)
 	}
@@ -34,8 +36,8 @@ type CalDAVCollection struct {
 
 // NewCalDAVCollection connects to the CalDAV calendar at endpoint (the calendar
 // collection URL), optionally authenticating with HTTP Basic Auth.
-func NewCalDAVCollection(endpoint, username, password string) (*CalDAVCollection, error) {
-	client, err := caldav.NewClient(davHTTPClient(username, password), endpoint)
+func NewCalDAVCollection(endpoint, username, password string, allowPrivate bool) (*CalDAVCollection, error) {
+	client, err := caldav.NewClient(davHTTPClient(username, password, allowPrivate), endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("dav: caldav client: %w", err)
 	}

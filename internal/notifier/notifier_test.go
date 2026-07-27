@@ -70,7 +70,7 @@ func TestNotifierDispatchesOncePerEvent(t *testing.T) {
 	}
 
 	feeds := feed.NewService(proxy.NewFetcher(st, logger(), true), logger())
-	n := New(st, feeds, logger())
+	n := New(st, feeds, logger(), true)
 
 	if err := n.Run(ctx); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -106,7 +106,7 @@ func TestNotifierSkipsDisabledFeeds(t *testing.T) {
 	}
 
 	feeds := feed.NewService(proxy.NewFetcher(st, logger(), true), logger())
-	if err := New(st, feeds, logger()).Run(ctx); err != nil {
+	if err := New(st, feeds, logger(), true).Run(ctx); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 }

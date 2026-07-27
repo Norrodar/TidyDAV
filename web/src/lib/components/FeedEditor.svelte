@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack, onMount } from 'svelte';
+  import { untrack, onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import {
     api,
@@ -40,13 +40,22 @@
           status: 'idle' as SourceStatus,
           statusMsg: ''
         }))
-      : [{ url: '', username: '', password: '', useAuth: false, status: 'idle' as SourceStatus, statusMsg: '' }]
+      : [
+          {
+            url: '',
+            username: '',
+            password: '',
+            useAuth: false,
+            status: 'idle' as SourceStatus,
+            statusMsg: ''
+          }
+        ]
   );
   let rules = $state<RuleConfig[]>(initial ? initial.rules.map((r) => ({ ...r })) : []);
   let basicAuthUser = $state(initial?.basicAuthUser ?? '');
   let basicAuthPassword = $state('');
   // Independently toggleable advanced options.
-  let cacheEnabled = $state(!!(initial && initial.ttlSeconds !== 900));
+  let cacheEnabled = $state(!!initial && initial.ttlSeconds > 0);
   let authEnabled = $state(initial?.basicAuthEnabled ?? false);
 
   let notifyWebhook = $state(initial?.notifications.webhookUrl ?? '');
@@ -56,7 +65,9 @@
   let notifyGotifyToken = $state('');
   let notifyTriggers = $state<string[]>(initial?.notifications.triggers ?? []);
   let webhookEnabled = $state(!!initial?.notifications.webhookUrl);
-  let ntfyEnabled = $state(!!(initial?.notifications.ntfyServer || initial?.notifications.ntfyTopic));
+  let ntfyEnabled = $state(
+    !!(initial?.notifications.ntfyServer || initial?.notifications.ntfyTopic)
+  );
   let gotifyEnabled = $state(
     !!(initial?.notifications.gotifyServer || initial?.notifications.gotifyTokenSet)
   );
@@ -68,7 +79,25 @@
   let weekOffset = $state(0);
   let panelOpen = $state(true);
 
-  const ruleTypes: RuleType[] = ['filter', 'dedup', 'rename', 'strip', 'timezone', 'expire'];
+  const ruleTypes: RuleType[] = [
+    'filter',
+    'dedup',
+    'rename',
+    'strip',
+    'timezone',
+    'expire',
+    'alarm'
+  ];
+
+  // Common reminder lead times. 360 min before an all-day event is 18:00 the
+  // evening before — the useful default for bin-collection calendars.
+  const alarmPresets = [
+    { key: 'alarm_at_start', minutes: 0 },
+    { key: 'alarm_1h', minutes: 60 },
+    { key: 'alarm_evening_before', minutes: 360 },
+    { key: 'alarm_1d', minutes: 1440 },
+    { key: 'alarm_2d', minutes: 2880 }
+  ];
 
   // Known fields offered as click chips for each rule kind.
   const dedupChips = ['SUMMARY', 'DATE', 'LOCATION', 'DESCRIPTION', 'CATEGORIES'];
@@ -120,11 +149,16 @@
         return { type, target: 'UTC', defaultTz: '' };
       case 'expire':
         return { type, days: 90 };
+      case 'alarm':
+        return { type, minutesBefore: 360, alarmText: '' };
     }
   }
 
   function addSource() {
-    sources = [...sources, { url: '', username: '', password: '', useAuth: false, status: 'idle', statusMsg: '' }];
+    sources = [
+      ...sources,
+      { url: '', username: '', password: '', useAuth: false, status: 'idle', statusMsg: '' }
+    ];
   }
   function removeSource(i: number) {
     sources = sources.filter((_, idx) => idx !== i);
@@ -173,7 +207,9 @@
     rules = rules.filter((_, idx) => idx !== i);
   }
   function changeRuleType(i: number, type: RuleType) {
+    const wasEnabled = rules[i].enabled;
     rules[i] = defaultRule(type);
+    if (wasEnabled === false) rules[i].enabled = false; // keep it switched off
   }
 
   // ── Drag & drop reordering ───────────────────────────────────────────────────
@@ -240,23 +276,35 @@
     const up = known.map((k) => k.toUpperCase());
     return (arr ?? []).filter((f) => !up.includes(f.toUpperCase())).join(', ');
   }
-  function setCustomFields(rule: RuleConfig, key: 'fields' | 'keyFields', known: string[], value: string) {
+  function setCustomFields(
+    rule: RuleConfig,
+    key: 'fields' | 'keyFields',
+    known: string[],
+    value: string
+  ) {
     const up = known.map((k) => k.toUpperCase());
     const kept = (rule[key] ?? []).filter((f) => up.includes(f.toUpperCase()));
-    const customs = value.split(',').map((s) => s.trim()).filter(Boolean);
+    const customs = value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     rule[key] = [...kept, ...customs];
   }
 
   function buildInput(): FeedInput {
     return {
       name,
-      ttlSeconds: cacheEnabled ? Math.max(1, Math.round(ttlMinutes)) * 60 : 900,
+      // 0 disables the cache; sending the default would keep caching silently.
+      ttlSeconds: cacheEnabled ? Math.max(1, Math.round(ttlMinutes)) * 60 : 0,
       sources: sources
         .filter((s) => s.url.trim() !== '')
         .map((s) => ({
           url: s.url.trim(),
           username: s.useAuth ? s.username || undefined : undefined,
-          password: s.useAuth ? s.password || undefined : undefined
+          password: s.useAuth ? s.password || undefined : undefined,
+          // Without this the server would restore the stored password, making
+          // it impossible to switch credentials off again.
+          clearPassword: !s.useAuth
         })),
       rules,
       basicAuthUser: authEnabled ? basicAuthUser : '',
@@ -266,32 +314,55 @@
         ntfyServer: ntfyEnabled ? notifyNtfyServer || undefined : '',
         ntfyTopic: ntfyEnabled ? notifyNtfyTopic || undefined : '',
         gotifyServer: gotifyEnabled ? notifyGotifyServer || undefined : '',
-        gotifyToken: gotifyEnabled ? notifyGotifyToken || undefined : undefined,
+        // Sent empty when the channel is off so the stored token is dropped.
+        gotifyToken: gotifyEnabled ? notifyGotifyToken || undefined : '',
         triggers: notifyTriggers
       }
     };
   }
 
-  // Returns a message for the first enabled rule with an invalid regex, else null.
-  function regexError(): string | null {
+  // Validates every enabled rule the way the backend does, so incomplete rules
+  // are reported in the user's language instead of as a raw Go error.
+  function ruleError(): string | null {
     for (let i = 0; i < rules.length; i++) {
       const r = rules[i];
       if (!isEnabled(r)) continue;
-      if ((r.type === 'filter' || r.type === 'rename') && r.matchMode === 'regex' && r.pattern) {
-        try {
-          new RegExp(r.pattern);
-        } catch {
-          return `${ruleLabel(r.type)} #${i + 1}: invalid regular expression.`;
+      const where = `${ruleLabel(r.type)} #${i + 1}: `;
+
+      if (r.type === 'filter' || r.type === 'rename') {
+        if (!r.pattern?.trim()) return where + t('err_pattern_required');
+        if (r.matchMode === 'regex') {
+          try {
+            new RegExp(r.pattern);
+          } catch {
+            return where + t('err_invalid_regex');
+          }
         }
+      }
+      if (r.type === 'strip' && !(r.fields ?? []).length) {
+        return where + t('err_fields_required');
+      }
+      if (r.type === 'timezone' && !r.target?.trim()) {
+        return where + t('err_timezone_required');
+      }
+      if (r.type === 'expire' && !(r.days && r.days > 0)) {
+        return where + t('err_days_required');
+      }
+      if (r.type === 'alarm' && (r.minutesBefore === undefined || r.minutesBefore < 0)) {
+        return where + t('err_lead_required');
       }
     }
     return null;
   }
 
   async function save() {
-    const re = regexError();
+    const re = ruleError();
     if (re) {
       error = re;
+      return;
+    }
+    if (authEnabled && !basicAuthUser.trim()) {
+      error = t('err_auth_user_required');
       return;
     }
     saving = true;
@@ -302,11 +373,26 @@
       toasts.show(feed ? t('calendar_saved') : t('calendar_created'));
       await goto('/feeds');
     } catch (e) {
+      if (await handledAuthError(e)) return;
       error = e instanceof ApiError ? e.message : t('save_failed');
     } finally {
       saving = false;
     }
   }
+
+  // Redirects to the login page when the session expired mid-edit; reports
+  // whether it handled the error.
+  async function handledAuthError(e: unknown): Promise<boolean> {
+    if (e instanceof ApiError && e.status === 401) {
+      await goto('/login');
+      return true;
+    }
+    return false;
+  }
+
+  onDestroy(() => {
+    for (const id of Object.values(checkTimers)) clearTimeout(id);
+  });
 
   // ── Test notifications ────────────────────────────────────────────────────
   let testing = $state<string | null>(null);
@@ -331,7 +417,7 @@
   }
 
   async function runPreview() {
-    const re = regexError();
+    const re = ruleError();
     if (re) {
       error = re;
       return;
@@ -342,6 +428,7 @@
     try {
       preview = await api.feeds.preview(buildInput(), feed?.id);
     } catch (e) {
+      if (await handledAuthError(e)) return;
       error = e instanceof ApiError ? e.message : t('preview_failed');
     } finally {
       previewing = false;
@@ -363,11 +450,18 @@
   );
 
   // Plain-language summary of what the notification config will do.
+  // Mirrors the backend's HasTarget(): a channel only counts once it actually
+  // has somewhere to deliver to, otherwise the summary promises notifications
+  // that would never be sent.
   const notifyChannelLabels = $derived(
     [
-      webhookEnabled ? t('enable_webhook') : '',
-      ntfyEnabled ? t('enable_ntfy') : '',
-      gotifyEnabled ? t('enable_gotify') : ''
+      webhookEnabled && notifyWebhook.trim() ? t('enable_webhook') : '',
+      ntfyEnabled && notifyNtfyServer.trim() && notifyNtfyTopic.trim() ? t('enable_ntfy') : '',
+      gotifyEnabled &&
+      notifyGotifyServer.trim() &&
+      (notifyGotifyToken.trim() || initial?.notifications.gotifyTokenSet)
+        ? t('enable_gotify')
+        : ''
     ].filter(Boolean)
   );
   const notifyTriggerLabels = $derived(
@@ -384,7 +478,12 @@
 </script>
 
 <div class="editor-layout">
-  <form onsubmit={(e) => { e.preventDefault(); save(); }}>
+  <form
+    onsubmit={(e) => {
+      e.preventDefault();
+      save();
+    }}
+  >
     <section class="card">
       <label class="field">
         <span>{t('name')}</span>
@@ -395,7 +494,9 @@
     <section class="card">
       <div class="section-head">
         <h2>{t('sources')}</h2>
-        <button type="button" class="button button-secondary" onclick={addSource}>{t('add_source')}</button>
+        <button type="button" class="button button-secondary" onclick={addSource}
+          >{t('add_source')}</button
+        >
       </div>
       <p class="muted">{t('sources_hint')}</p>
       {#each sources as source, i (i)}
@@ -407,26 +508,40 @@
                 bind:value={source.url}
                 oninput={() => scheduleCheck(i)}
                 placeholder={t('source_url_placeholder')}
+                aria-label={t('source_url')}
               />
               {#if source.status !== 'idle'}
                 <span
                   class="src-status {source.status}"
+                  role="status"
+                  aria-live="polite"
                   title={source.status === 'checking' ? t('source_checking') : source.statusMsg}
                 >
                   {#if source.status === 'checking'}
                     <span class="spinner"></span>
                   {:else if source.status === 'ok'}
-                    ✓
+                    <span aria-hidden="true">✓</span>
                   {:else}
-                    ✕
+                    <span aria-hidden="true">✕</span>
                   {/if}
+                  <span class="sr-only">{source.statusMsg}</span>
                 </span>
               {/if}
             </div>
-            <button type="button" class="icon" onclick={() => removeSource(i)} aria-label={t('remove')}>×</button>
+            <button
+              type="button"
+              class="icon"
+              onclick={() => removeSource(i)}
+              aria-label={t('remove')}>×</button
+            >
           </div>
           <label class="check">
-            <input type="checkbox" bind:checked={source.useAuth} onchange={() => scheduleCheck(i)} /> {t('use_credentials')}
+            <input
+              type="checkbox"
+              bind:checked={source.useAuth}
+              onchange={() => scheduleCheck(i)}
+            />
+            {t('use_credentials')}
           </label>
           <div class="row creds" class:disabled={!source.useAuth}>
             <input
@@ -436,6 +551,7 @@
               disabled={!source.useAuth}
               autocomplete="off"
               placeholder={t('username')}
+              aria-label={t('username')}
             />
             <input
               class="input grow"
@@ -445,6 +561,7 @@
               disabled={!source.useAuth}
               autocomplete="new-password"
               placeholder={t('password')}
+              aria-label={t('password')}
             />
           </div>
         </div>
@@ -454,7 +571,9 @@
     <section class="card">
       <div class="section-head">
         <h2>{t('rules')}</h2>
-        <button type="button" class="button button-secondary" onclick={addRule}>{t('add_rule')}</button>
+        <button type="button" class="button button-secondary" onclick={addRule}
+          >{t('add_rule')}</button
+        >
       </div>
       <p class="muted">{rules.length === 0 ? t('no_rules') : t('rules_apply_order')}</p>
 
@@ -486,8 +605,22 @@
               </svg>
             </span>
             <span class="move-btns">
-              <button type="button" class="move" onclick={() => moveRule(i, -1)} disabled={i === 0} aria-label={t('move_up')} title={t('move_up')}>▲</button>
-              <button type="button" class="move" onclick={() => moveRule(i, 1)} disabled={i === rules.length - 1} aria-label={t('move_down')} title={t('move_down')}>▼</button>
+              <button
+                type="button"
+                class="move"
+                onclick={() => moveRule(i, -1)}
+                disabled={i === 0}
+                aria-label={t('move_up')}
+                title={t('move_up')}>▲</button
+              >
+              <button
+                type="button"
+                class="move"
+                onclick={() => moveRule(i, 1)}
+                disabled={i === rules.length - 1}
+                aria-label={t('move_down')}
+                title={t('move_down')}>▼</button
+              >
             </span>
             <span class="rule-num">{i + 1}</span>
             <select
@@ -501,10 +634,19 @@
             </select>
             <div class="rule-actions">
               <label class="toggle">
-                <input type="checkbox" checked={isEnabled(rule)} onchange={() => toggleEnabled(rule)} />
+                <input
+                  type="checkbox"
+                  checked={isEnabled(rule)}
+                  onchange={() => toggleEnabled(rule)}
+                />
                 {t('rule_enabled')}
               </label>
-              <button type="button" class="icon" onclick={() => removeRule(i)} aria-label={t('remove')}>×</button>
+              <button
+                type="button"
+                class="icon"
+                onclick={() => removeRule(i)}
+                aria-label={t('remove')}>×</button
+              >
             </div>
           </div>
           <p class="rule-desc">{ruleHelp(rule.type)}</p>
@@ -528,8 +670,8 @@
                   type="button"
                   class="chip"
                   class:on={hasField(rule.fields, f)}
-                  onclick={() => toggleField(rule, 'fields', f)}
-                >{fieldLabel(f)}</button>
+                  onclick={() => toggleField(rule, 'fields', f)}>{fieldLabel(f)}</button
+                >
               {/each}
             </div>
             <input
@@ -550,7 +692,11 @@
                 <option value="regex">{t('match_regex')}</option>
               </select>
               <input class="input grow" bind:value={rule.pattern} placeholder={t('pattern')} />
-              <input class="input grow" bind:value={rule.replacement} placeholder={t('replacement')} />
+              <input
+                class="input grow"
+                bind:value={rule.replacement}
+                placeholder={t('replacement')}
+              />
             </div>
           {:else if rule.type === 'dedup'}
             <div class="chips-label">{t('key_fields')}</div>
@@ -560,8 +706,8 @@
                   type="button"
                   class="chip"
                   class:on={hasField(rule.keyFields, f)}
-                  onclick={() => toggleField(rule, 'keyFields', f)}
-                >{fieldLabel(f)}</button>
+                  onclick={() => toggleField(rule, 'keyFields', f)}>{fieldLabel(f)}</button
+                >
               {/each}
             </div>
             <input
@@ -578,8 +724,8 @@
                   type="button"
                   class="chip"
                   class:on={hasField(rule.fields, f)}
-                  onclick={() => toggleField(rule, 'fields', f)}
-                >{fieldLabel(f)}</button>
+                  onclick={() => toggleField(rule, 'fields', f)}>{fieldLabel(f)}</button
+                >
               {/each}
             </div>
             <input
@@ -590,14 +736,42 @@
             />
           {:else if rule.type === 'timezone'}
             <div class="rule-fields">
-              <input class="input grow" bind:value={rule.target} placeholder={t('target_timezone')} />
-              <input class="input grow" bind:value={rule.defaultTz} placeholder={t('default_timezone')} />
+              <input
+                class="input grow"
+                bind:value={rule.target}
+                placeholder={t('target_timezone')}
+              />
+              <input
+                class="input grow"
+                bind:value={rule.defaultTz}
+                placeholder={t('default_timezone')}
+              />
             </div>
           {:else if rule.type === 'expire'}
             <label class="inline">
               {t('drop_older_than')}
-              <input class="input narrow" type="number" min="1" bind:value={rule.days} /> {t('days')}
+              <input class="input narrow" type="number" min="1" bind:value={rule.days} />
+              {t('days')}
             </label>
+          {:else if rule.type === 'alarm'}
+            <div class="chips-label">{t('alarm_when')}</div>
+            <div class="chips">
+              {#each alarmPresets as preset}
+                <button
+                  type="button"
+                  class="chip"
+                  class:on={rule.minutesBefore === preset.minutes}
+                  onclick={() => (rule.minutesBefore = preset.minutes)}>{t(preset.key)}</button
+                >
+              {/each}
+            </div>
+            <div class="row wrap">
+              <label class="inline">
+                <input class="input narrow" type="number" min="0" bind:value={rule.minutesBefore} />
+                {t('minutes_before')}
+              </label>
+              <input class="input grow" bind:value={rule.alarmText} placeholder={t('alarm_text')} />
+            </div>
           {/if}
         </div>
       {/each}
@@ -612,7 +786,9 @@
       <h2>{t('advanced')}</h2>
 
       <div class="opt">
-        <label class="check"><input type="checkbox" bind:checked={cacheEnabled} /> {t('cache_title')}</label>
+        <label class="check"
+          ><input type="checkbox" bind:checked={cacheEnabled} /> {t('cache_title')}</label
+        >
         <p class="opt-desc">{t('cache_desc')}</p>
         {#if cacheEnabled}
           <label class="field">
@@ -623,13 +799,19 @@
       </div>
 
       <div class="opt">
-        <label class="check"><input type="checkbox" bind:checked={authEnabled} /> {t('basic_auth_title')}</label>
+        <label class="check"
+          ><input type="checkbox" bind:checked={authEnabled} /> {t('basic_auth_title')}</label
+        >
         <p class="opt-desc">{t('basic_auth_desc')}</p>
         {#if authEnabled}
           <div class="row wrap">
             <label class="field grow">
               <span>{t('basic_auth_user')}</span>
-              <input class="input" bind:value={basicAuthUser} placeholder={t('basic_auth_disable_hint')} />
+              <input
+                class="input"
+                bind:value={basicAuthUser}
+                placeholder={t('basic_auth_disable_hint')}
+              />
             </label>
             <label class="field grow">
               <span>{t('basic_auth_password')}</span>
@@ -654,16 +836,41 @@
         <div class="notify-col">
           <div class="chips-label">{t('trigger_on')}</div>
           <div class="chips">
-            <button type="button" class="chip" class:on={notifyTriggers.includes('filter')} onclick={() => toggleTrigger('filter')}>{t('rule_filter')}</button>
-            <button type="button" class="chip" class:on={notifyTriggers.includes('rename')} onclick={() => toggleTrigger('rename')}>{t('rule_rename')}</button>
+            <button
+              type="button"
+              class="chip"
+              class:on={notifyTriggers.includes('filter')}
+              onclick={() => toggleTrigger('filter')}>{t('rule_filter')}</button
+            >
+            <button
+              type="button"
+              class="chip"
+              class:on={notifyTriggers.includes('rename')}
+              onclick={() => toggleTrigger('rename')}>{t('rule_rename')}</button
+            >
           </div>
         </div>
         <div class="notify-col">
           <div class="chips-label">{t('notify_via')}</div>
           <div class="chips">
-            <button type="button" class="chip" class:on={webhookEnabled} onclick={() => (webhookEnabled = !webhookEnabled)}>{t('enable_webhook')}</button>
-            <button type="button" class="chip" class:on={ntfyEnabled} onclick={() => (ntfyEnabled = !ntfyEnabled)}>{t('enable_ntfy')}</button>
-            <button type="button" class="chip" class:on={gotifyEnabled} onclick={() => (gotifyEnabled = !gotifyEnabled)}>{t('enable_gotify')}</button>
+            <button
+              type="button"
+              class="chip"
+              class:on={webhookEnabled}
+              onclick={() => (webhookEnabled = !webhookEnabled)}>{t('enable_webhook')}</button
+            >
+            <button
+              type="button"
+              class="chip"
+              class:on={ntfyEnabled}
+              onclick={() => (ntfyEnabled = !ntfyEnabled)}>{t('enable_ntfy')}</button
+            >
+            <button
+              type="button"
+              class="chip"
+              class:on={gotifyEnabled}
+              onclick={() => (gotifyEnabled = !gotifyEnabled)}>{t('enable_gotify')}</button
+            >
           </div>
         </div>
       </div>
@@ -674,7 +881,12 @@
             <span>{t('webhook_url')}</span>
             <input class="input" bind:value={notifyWebhook} placeholder="https://…" />
           </label>
-          <button type="button" class="button button-secondary" onclick={() => sendTest('webhook')} disabled={testing !== null || !notifyWebhook}>
+          <button
+            type="button"
+            class="button button-secondary"
+            onclick={() => sendTest('webhook')}
+            disabled={testing !== null || !notifyWebhook}
+          >
             {testing === 'webhook' ? t('sending_test') : t('send_test')}
           </button>
         </div>
@@ -689,7 +901,12 @@
             <span>{t('ntfy_topic')}</span>
             <input class="input" bind:value={notifyNtfyTopic} />
           </label>
-          <button type="button" class="button button-secondary" onclick={() => sendTest('ntfy')} disabled={testing !== null || !notifyNtfyServer || !notifyNtfyTopic}>
+          <button
+            type="button"
+            class="button button-secondary"
+            onclick={() => sendTest('ntfy')}
+            disabled={testing !== null || !notifyNtfyServer || !notifyNtfyTopic}
+          >
             {testing === 'ntfy' ? t('sending_test') : t('send_test')}
           </button>
         </div>
@@ -698,7 +915,11 @@
         <div class="row wrap">
           <label class="field grow">
             <span>{t('gotify_server')}</span>
-            <input class="input" bind:value={notifyGotifyServer} placeholder="https://gotify.example.com" />
+            <input
+              class="input"
+              bind:value={notifyGotifyServer}
+              placeholder="https://gotify.example.com"
+            />
           </label>
           <label class="field grow">
             <span>{t('gotify_token')}</span>
@@ -710,7 +931,14 @@
               placeholder={initial?.notifications.gotifyTokenSet ? t('unchanged') : ''}
             />
           </label>
-          <button type="button" class="button button-secondary" onclick={() => sendTest('gotify')} disabled={testing !== null || !notifyGotifyServer || (!notifyGotifyToken && !initial?.notifications.gotifyTokenSet)}>
+          <button
+            type="button"
+            class="button button-secondary"
+            onclick={() => sendTest('gotify')}
+            disabled={testing !== null ||
+              !notifyGotifyServer ||
+              (!notifyGotifyToken && !initial?.notifications.gotifyTokenSet)}
+          >
             {testing === 'gotify' ? t('sending_test') : t('send_test')}
           </button>
         </div>
@@ -729,52 +957,58 @@
     </div>
   </form>
 
-    <aside class="preview-panel" class:collapsed={!panelOpen}>
-      <div class="panel-head">
-        <h2>{t('preview')}</h2>
-        {#if preview}
-          <button type="button" class="linklike" onclick={() => (panelOpen = !panelOpen)}>
-            {panelOpen ? t('hide_preview') : t('show_preview')}
-          </button>
-        {/if}
-      </div>
-      {#if !preview}
-        <p class="preview-empty">{t('preview_empty')}</p>
-      {:else if panelOpen}
-        <div class="week-nav">
-          <button type="button" class="button button-secondary button-sm" onclick={() => weekOffset--}>‹ {t('prev_week')}</button>
-          <span class="week-label">{tf('this_week', { date: currentWeekStart.toLocaleDateString(lang) })}</span>
-          <button type="button" class="button button-secondary button-sm" onclick={() => weekOffset++}>{t('next_week')} ›</button>
-        </div>
-
-        <div class="diff">
-          <div class="diff-col">
-            <h3>{t('original')} <span class="badge">{weekOriginal.length}</span></h3>
-            {#if weekOriginal.length === 0}
-              <p class="muted">{t('no_events_week')}</p>
-            {:else}
-              <ul>
-                {#each weekOriginal as e, i (i)}
-                  <li><span class="when">{fmtWhen(e.start)}</span> {e.summary}</li>
-                {/each}
-              </ul>
-            {/if}
-          </div>
-          <div class="diff-col transformed">
-            <h3>{t('transformed')} <span class="badge badge-ok">{weekTransformed.length}</span></h3>
-            {#if weekTransformed.length === 0}
-              <p class="muted">{t('no_events_week')}</p>
-            {:else}
-              <ul>
-                {#each weekTransformed as e, i (i)}
-                  <li><span class="when">{fmtWhen(e.start)}</span> {e.summary}</li>
-                {/each}
-              </ul>
-            {/if}
-          </div>
-        </div>
+  <aside class="preview-panel" class:collapsed={!panelOpen}>
+    <div class="panel-head">
+      <h2>{t('preview')}</h2>
+      {#if preview}
+        <button type="button" class="linklike" onclick={() => (panelOpen = !panelOpen)}>
+          {panelOpen ? t('hide_preview') : t('show_preview')}
+        </button>
       {/if}
-    </aside>
+    </div>
+    {#if !preview}
+      <p class="preview-empty">{t('preview_empty')}</p>
+    {:else if panelOpen}
+      <div class="week-nav">
+        <button type="button" class="button button-secondary button-sm" onclick={() => weekOffset--}
+          >‹ {t('prev_week')}</button
+        >
+        <span class="week-label"
+          >{tf('this_week', { date: currentWeekStart.toLocaleDateString(lang) })}</span
+        >
+        <button type="button" class="button button-secondary button-sm" onclick={() => weekOffset++}
+          >{t('next_week')} ›</button
+        >
+      </div>
+
+      <div class="diff">
+        <div class="diff-col">
+          <h3>{t('original')} <span class="badge">{weekOriginal.length}</span></h3>
+          {#if weekOriginal.length === 0}
+            <p class="muted">{t('no_events_week')}</p>
+          {:else}
+            <ul>
+              {#each weekOriginal as e, i (i)}
+                <li><span class="when">{fmtWhen(e.start)}</span> {e.summary}</li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+        <div class="diff-col transformed">
+          <h3>{t('transformed')} <span class="badge badge-ok">{weekTransformed.length}</span></h3>
+          {#if weekTransformed.length === 0}
+            <p class="muted">{t('no_events_week')}</p>
+          {:else}
+            <ul>
+              {#each weekTransformed as e, i (i)}
+                <li><span class="when">{fmtWhen(e.start)}</span> {e.summary}</li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+      </div>
+    {/if}
+  </aside>
 </div>
 
 <style>
@@ -874,6 +1108,17 @@
     font-weight: var(--weight-semibold);
     cursor: default;
   }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
   .src-status.ok {
     color: var(--success);
   }
@@ -963,7 +1208,9 @@
     color: var(--text-tertiary);
     cursor: grab;
     border-radius: var(--radius-sm);
-    transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+    transition:
+      color var(--dur-fast) var(--ease),
+      background var(--dur-fast) var(--ease);
   }
   .drag-handle:hover {
     color: var(--text-secondary);

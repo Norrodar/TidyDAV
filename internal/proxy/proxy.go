@@ -4,24 +4,39 @@ package proxy
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"time"
 
+	"github.com/Norrodar/TidyDAV/internal/outbound"
 	"github.com/Norrodar/TidyDAV/internal/store"
 )
 
 // maxFeedSize caps how much we read from an upstream feed (25 MiB).
 const maxFeedSize = 25 << 20
 
-// Cache is the subset of the store the fetcher needs.
+// Cache is the subset of the store the fetcher needs. Entries are addressed by
+// an opaque key from cacheKey, not by URL alone.
 type Cache interface {
-	GetCachedFeed(ctx context.Context, url string) (*store.CachedFeed, error)
+	GetCachedFeed(ctx context.Context, key string) (*store.CachedFeed, error)
 	PutCachedFeed(ctx context.Context, cf *store.CachedFeed) error
+}
+
+// cacheKey scopes a cached copy to the credentials it was fetched with, so a
+// request without credentials can never be served a body that was only
+// obtainable with them (and cannot overwrite it either). The credentials are
+// hashed, never stored.
+func cacheKey(url, username, password string) string {
+	if username == "" && password == "" {
+		return url
+	}
+	sum := sha256.Sum256([]byte(username + "\x00" + password))
+	return url + "\x00" + hex.EncodeToString(sum[:8])
 }
 
 // Source records where a fetched body came from.
@@ -56,38 +71,7 @@ func NewFetcher(cache Cache, log *slog.Logger, allowPrivate bool) *Fetcher {
 }
 
 func buildClient(allowPrivate bool) *http.Client {
-	if allowPrivate {
-		return &http.Client{Timeout: 30 * time.Second}
-	}
-	dialer := &net.Dialer{Timeout: 10 * time.Second}
-	return &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			// Resolve and validate the target before dialing, then dial the
-			// checked IP so a DNS rebind cannot slip a private address through.
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				host, port, err := net.SplitHostPort(addr)
-				if err != nil {
-					return nil, err
-				}
-				ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-				if err != nil {
-					return nil, err
-				}
-				for _, ip := range ips {
-					if isBlockedIP(ip.IP) {
-						return nil, fmt.Errorf("refusing to connect to non-public address %s", ip.IP)
-					}
-				}
-				return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
-			},
-		},
-	}
-}
-
-func isBlockedIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast()
+	return outbound.Client(30*time.Second, allowPrivate)
 }
 
 // Fetch is FetchAuth without upstream credentials.
@@ -101,7 +85,8 @@ func (f *Fetcher) Fetch(ctx context.Context, url string, ttl time.Duration) ([]b
 // success the cache is refreshed, and on failure the last good cached copy is
 // served (stale-on-error).
 func (f *Fetcher) FetchAuth(ctx context.Context, url string, ttl time.Duration, username, password string) ([]byte, Source, error) {
-	cached, err := f.cache.GetCachedFeed(ctx, url)
+	key := cacheKey(url, username, password)
+	cached, err := f.cache.GetCachedFeed(ctx, key)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return nil, SourceNone, fmt.Errorf("proxy: read cache: %w", err)
 	}
@@ -128,7 +113,7 @@ func (f *Fetcher) FetchAuth(ctx context.Context, url string, ttl time.Duration, 
 		body = cached.Body
 	}
 
-	put := &store.CachedFeed{URL: url, Body: body, ETag: etag, FetchedAt: f.now().UTC()}
+	put := &store.CachedFeed{Key: key, URL: url, Body: body, ETag: etag, FetchedAt: f.now().UTC()}
 	if err := f.cache.PutCachedFeed(ctx, put); err != nil {
 		f.log.Warn("failed to update feed cache", "url", url, "error", err)
 	}

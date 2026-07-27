@@ -16,6 +16,10 @@ type PreviewEntry struct {
 	UID   string `json:"uid"`
 	Title string `json:"title"`
 	When  string `json:"when"` // RFC3339 start for calendars, "" for contacts
+
+	// modified drives the newest-wins conflict simulation; it is internal and
+	// never serialised.
+	modified time.Time
 }
 
 // Summarize renders a compact preview entry from an item body. kind is "caldav"
@@ -74,6 +78,15 @@ func PreviewMerge(ctx context.Context, a, b Collection, opts Options, kind strin
 		mergedMap[uid] = e
 	}
 	for uid, e := range primary {
+		// Under newest-wins the more recently modified side keeps the item, so
+		// the preview must apply the same rule as the real run — otherwise it
+		// shows a different outcome for exactly the setup it is needed for.
+		if opts.Direction == Bidirectional && opts.Conflict == NewestWins {
+			if other, ok := secondary[uid]; ok && other.modified.After(e.modified) {
+				mergedMap[uid] = other
+				continue
+			}
+		}
 		mergedMap[uid] = e // authoritative side overwrites
 	}
 
@@ -98,6 +111,9 @@ func collect(ctx context.Context, coll Collection, opts Options, kind string) (m
 			continue
 		}
 		e := Summarize(kind, item.Data)
+		if opts.Modified != nil {
+			e.modified = opts.Modified(item.Data)
+		}
 		key := e.UID
 		if key == "" {
 			key = meta.Href

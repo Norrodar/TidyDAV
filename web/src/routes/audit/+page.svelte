@@ -2,10 +2,16 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { api, ApiError, type AuditEntry } from '$lib/api';
+  import { t, lang } from '$lib/i18n';
 
   let entries = $state<AuditEntry[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+
+  function fmtTime(iso: string): string {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? iso : d.toLocaleString(lang);
+  }
 
   onMount(async () => {
     try {
@@ -16,34 +22,38 @@
         return;
       }
       if (e instanceof ApiError && e.status === 403) {
-        error = 'Admin access required.';
+        error = t('audit_admin_only');
         return;
       }
-      error = e instanceof Error ? e.message : 'Failed to load audit log';
+      error = e instanceof Error ? e.message : t('load_failed');
     } finally {
       loading = false;
     }
   });
 </script>
 
-<h1>Audit log</h1>
+<h1>{t('audit_title')}</h1>
 
 {#if loading}
-  <p class="muted">Loading…</p>
+  <p class="muted">{t('loading')}</p>
 {:else if error}
   <p class="error">{error}</p>
 {:else if entries.length === 0}
-  <p class="muted">No entries yet.</p>
+  <p class="muted">{t('audit_empty')}</p>
 {:else}
   <div class="card">
     <table>
       <thead>
-        <tr><th>Time</th><th>User</th><th>Action</th><th>Target</th><th>Detail</th></tr>
+        <tr
+          ><th>{t('audit_time')}</th><th>{t('audit_user')}</th><th>{t('audit_action')}</th><th
+            >{t('audit_target')}</th
+          ><th>{t('audit_detail')}</th></tr
+        >
       </thead>
       <tbody>
         {#each entries as entry (entry.id)}
           <tr>
-            <td class="mono">{entry.createdAt}</td>
+            <td class="mono">{fmtTime(entry.createdAt)}</td>
             <td>{entry.userEmail || '—'}</td>
             <td>{entry.action}</td>
             <td class="mono">{entry.target || '—'}</td>

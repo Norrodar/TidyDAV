@@ -28,7 +28,12 @@
     try {
       const hex = color.replace('#', '');
       const full =
-        hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
+        hex.length === 3
+          ? hex
+              .split('')
+              .map((c) => c + c)
+              .join('')
+          : hex;
       const r = parseInt(full.slice(0, 2), 16);
       const g = parseInt(full.slice(2, 4), 16);
       const b = parseInt(full.slice(4, 6), 16);
@@ -61,7 +66,7 @@
 
   // Central auth guard.
   $effect(() => {
-    if (session.loading) return;
+    if (session.loading || session.unreachable) return;
     const path = $page.url.pathname;
     const isProtected =
       path.startsWith('/feeds') || path.startsWith('/sync') || path.startsWith('/audit');
@@ -103,10 +108,12 @@
       <div class="wm-row big">
         <div class="wm-track" style="--dur:2400s">
           <div class="wm-group">
-            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span>{/each}
+            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span
+              >{/each}
           </div>
           <div class="wm-group">
-            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span>{/each}
+            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span
+              >{/each}
           </div>
         </div>
       </div>
@@ -114,10 +121,12 @@
       <div class="wm-row small reverse">
         <div class="wm-track" style="--dur:1700s">
           <div class="wm-group">
-            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span>{/each}
+            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span
+              >{/each}
           </div>
           <div class="wm-group">
-            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span>{/each}
+            {#each wmWords as _w}<span class="wm-word">Tidy<span class="dav">DAV</span></span
+              >{/each}
           </div>
         </div>
       </div>
@@ -152,6 +161,9 @@
   </header>
 
   <main class="content">
+    {#if session.unreachable}
+      <p class="offline" role="alert">{t('connection_failed')}</p>
+    {/if}
     {@render children()}
   </main>
 
@@ -223,15 +235,25 @@
     opacity: 0.13;
   }
   @keyframes wm-marquee {
-    from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
   }
   @keyframes wm-marquee-rev {
-    from { transform: translateX(-50%); }
-    to { transform: translateX(0); }
+    from {
+      transform: translateX(-50%);
+    }
+    to {
+      transform: translateX(0);
+    }
   }
   @media (prefers-reduced-motion: reduce) {
-    .wm-track { animation: none; }
+    .wm-track {
+      animation: none;
+    }
   }
 
   .topbar {
@@ -328,6 +350,15 @@
     font-size: var(--text-sm);
   }
 
+  .offline {
+    margin: 0 0 var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    border-left: 2px solid var(--warning);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+  }
   .content {
     position: relative;
     z-index: 1;

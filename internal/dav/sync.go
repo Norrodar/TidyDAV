@@ -45,6 +45,9 @@ func syncOneWay(ctx context.Context, src, dst Collection, state *State, opts Opt
 	if err != nil {
 		return res, fmt.Errorf("list source: %w", err)
 	}
+	if err := guardVanished("source", len(srcList), len(state.Items)); err != nil {
+		return res, err
+	}
 
 	seen := make(map[string]bool, len(srcList))
 	filtered := make(map[string]bool) // out-of-window UIDs: skipped, protected from deletion

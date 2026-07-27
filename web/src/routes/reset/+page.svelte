@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
@@ -21,7 +22,7 @@
       await api.confirmPasswordReset(token, password);
       await goto('/login');
     } catch (err) {
-      error = err instanceof ApiError ? err.message : 'Reset failed';
+      error = err instanceof ApiError ? err.message : t('save_failed');
     } finally {
       submitting = false;
     }
@@ -30,14 +31,14 @@
 
 <div class="auth">
   <div class="card">
-    <h1>Set a new password</h1>
+    <h1>{t('set_new_password')}</h1>
     {#if !token}
-      <p class="error">This reset link is missing its token.</p>
-      <a class="button button-secondary" href="/reset/request">Request a new link</a>
+      <p class="error">{t('reset_token_missing')}</p>
+      <a class="button button-secondary" href="/reset/request">{t('reset_password')}</a>
     {:else}
       <form onsubmit={submit}>
         <label>
-          <span>New password</span>
+          <span>{t('new_password')}</span>
           <input
             class="input"
             type="password"
@@ -49,7 +50,7 @@
         </label>
         {#if error}<p class="error">{error}</p>{/if}
         <button class="button" type="submit" disabled={submitting}>
-          {submitting ? 'Saving…' : 'Set password'}
+          {submitting ? t('saving') : t('set_password')}
         </button>
       </form>
     {/if}

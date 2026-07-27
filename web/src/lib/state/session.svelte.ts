@@ -15,6 +15,8 @@ class SessionState {
   accentColor = $state<string | undefined>(undefined);
   backgroundAnimation = $state(true);
   loading = $state(true);
+  /** True when the last session probe could not reach the backend at all. */
+  unreachable = $state(false);
   error = $state<string | null>(null);
 
   readonly authenticated = $derived(this.user !== null);
@@ -38,8 +40,13 @@ class SessionState {
     this.error = null;
     try {
       this.apply(await api.session());
+      this.unreachable = false;
     } catch (e) {
+      // A failed session probe is not the same as being signed out: without
+      // this flag the layout guard would bounce the user to /login and hide
+      // the fact that the backend is simply unreachable.
       this.error = e instanceof Error ? e.message : 'unknown error';
+      this.unreachable = true;
     } finally {
       this.loading = false;
     }

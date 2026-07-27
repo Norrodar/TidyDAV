@@ -10,6 +10,7 @@ const (
 	RuleStrip    = "strip"
 	RuleTimezone = "timezone"
 	RuleExpire   = "expire"
+	RuleAlarm    = "alarm"
 )
 
 // RuleConfig is the JSON-serialisable description of a single rule. Only the
@@ -42,6 +43,10 @@ type RuleConfig struct {
 
 	// expire
 	Days int `json:"days,omitempty"`
+
+	// alarm
+	MinutesBefore int    `json:"minutesBefore,omitempty"`
+	AlarmText     string `json:"alarmText,omitempty"`
 }
 
 // BuildRule constructs a Rule from its configuration, validating parameters.
@@ -59,6 +64,8 @@ func BuildRule(c RuleConfig) (Rule, error) {
 		return NewTimezoneRule(c.Target, c.DefaultTZ)
 	case RuleExpire:
 		return NewExpireRule(c.Days)
+	case RuleAlarm:
+		return NewAlarmRule(c.MinutesBefore, c.AlarmText)
 	default:
 		return nil, fmt.Errorf("pipeline: unknown rule type %q", c.Type)
 	}

@@ -201,6 +201,50 @@ func TestRenderAttachesTimezones(t *testing.T) {
 	}
 }
 
+// A recurrence override (a moved or cancelled instance) carries the series
+// UID plus a RECURRENCE-ID. Merging must keep both, or clients show the
+// instance at its original time / resurrect a cancelled one.
+func TestRenderKeepsRecurrenceOverrides(t *testing.T) {
+	upstream := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//up//EN\r\n" +
+		"BEGIN:VEVENT\r\nUID:series@up\r\nDTSTAMP:20260101T000000Z\r\n" +
+		"DTSTART:20260105T090000Z\r\nRRULE:FREQ=WEEKLY\r\nSUMMARY:Standup\r\nEND:VEVENT\r\n" +
+		"BEGIN:VEVENT\r\nUID:series@up\r\nDTSTAMP:20260101T000000Z\r\n" +
+		"RECURRENCE-ID:20260112T090000Z\r\nDTSTART:20260112T140000Z\r\nSUMMARY:Standup (moved)\r\nEND:VEVENT\r\n" +
+		"BEGIN:VEVENT\r\nUID:series@up\r\nDTSTAMP:20260101T000000Z\r\n" +
+		"RECURRENCE-ID:20260119T090000Z\r\nDTSTART:20260119T090000Z\r\nSTATUS:CANCELLED\r\nSUMMARY:Standup\r\nEND:VEVENT\r\n" +
+		"END:VCALENDAR\r\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(upstream))
+	}))
+	t.Cleanup(srv.Close)
+
+	out, err := newSvc(t).Render(context.Background(), &store.Feed{
+		ID: "rec", Secret: "rec", Sources: []store.FeedSource{{URL: srv.URL}},
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	s := string(out)
+	if n := strings.Count(s, "BEGIN:VEVENT"); n != 3 {
+		t.Fatalf("event count = %d, want 3 (master + two overrides)", n)
+	}
+	if !strings.Contains(s, "Standup (moved)") || !strings.Contains(s, "STATUS:CANCELLED") {
+		t.Errorf("overrides were dropped by UID dedup:\n%s", s)
+	}
+
+	// The same source twice must still collapse to one copy of each.
+	out, err = newSvc(t).Render(context.Background(), &store.Feed{
+		ID: "rec2", Secret: "rec2",
+		Sources: []store.FeedSource{{URL: srv.URL}, {URL: srv.URL}},
+	})
+	if err != nil {
+		t.Fatalf("Render (duplicate source): %v", err)
+	}
+	if n := strings.Count(string(out), "BEGIN:VEVENT"); n != 3 {
+		t.Errorf("duplicate source produced %d events, want 3", n)
+	}
+}
+
 func TestRenderNoSourcesIsEmpty(t *testing.T) {
 	out, err := newSvc(t).Render(context.Background(), &store.Feed{ID: "f4", Secret: "s4"})
 	if err != nil {

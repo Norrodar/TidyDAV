@@ -43,5 +43,9 @@ export function nextDirection(d: SyncDirection): SyncDirection {
 
 /** i18n key describing a sync direction. */
 export function flowKey(d: SyncDirection): string {
-  return d === 'b-to-a' ? 'flow_b_to_a' : d === 'bidirectional' ? 'flow_bidirectional' : 'flow_a_to_b';
+  return d === 'b-to-a'
+    ? 'flow_b_to_a'
+    : d === 'bidirectional'
+      ? 'flow_bidirectional'
+      : 'flow_a_to_b';
 }

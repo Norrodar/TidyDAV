@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { goto } from '$app/navigation';
   import { api, ApiError } from '$lib/api';
   import { session } from '$lib/state/session.svelte';
@@ -16,7 +17,7 @@
       session.apply(await api.register(email, password));
       await goto('/feeds');
     } catch (err) {
-      error = err instanceof ApiError ? err.message : 'Registration failed';
+      error = err instanceof ApiError ? err.message : t('save_failed');
     } finally {
       submitting = false;
     }
@@ -25,16 +26,16 @@
 
 <div class="auth">
   <div class="card">
-    <h1>Create account</h1>
-    <p class="subtitle">Set up your TidyDAV login.</p>
+    <h1>{t('create_account')}</h1>
+    <p class="subtitle">{t('create_account_sub')}</p>
 
     <form onsubmit={submit}>
       <label>
-        <span>Email</span>
+        <span>{t('email')}</span>
         <input class="input" type="email" bind:value={email} autocomplete="username" required />
       </label>
       <label>
-        <span>Password</span>
+        <span>{t('password')}</span>
         <input
           class="input"
           type="password"
@@ -48,11 +49,11 @@
       {#if error}<p class="error">{error}</p>{/if}
 
       <button class="button" type="submit" disabled={submitting}>
-        {submitting ? 'Creating…' : 'Create account'}
+        {submitting ? t('creating') : t('create_account')}
       </button>
     </form>
 
-    <p class="hint">Already have an account? <a href="/login">Sign in</a></p>
+    <p class="hint">{t('have_account')} <a href="/login">{t('sign_in')}</a></p>
   </div>
 </div>
 

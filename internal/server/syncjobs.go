@@ -155,7 +155,10 @@ func (s *Server) handleRunSyncJob(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.app.Sync.RunOne(r.Context(), job)
+	if err := s.app.Sync.RunOne(r.Context(), job); err != nil {
+		writeError(w, http.StatusConflict, "a run of this job is already in progress")
+		return
+	}
 	if reloaded, err := s.app.Store.SyncJobByID(r.Context(), job.ID); err == nil {
 		job = reloaded
 	}
@@ -174,6 +177,7 @@ type syncPreviewRequest struct {
 	BURL        string `json:"bUrl"`
 	BUsername   string `json:"bUsername"`
 	BPassword   string `json:"bPassword"`
+	Conflict    string `json:"conflict"`
 	WindowStart string `json:"windowStart"`
 	WindowEnd   string `json:"windowEnd"`
 	WeekStart   string `json:"weekStart"` // ISO date; restricts the preview to that week
@@ -218,9 +222,16 @@ func (s *Server) handleSyncPreview(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	opts.UID = dav.CalendarUID
+	opts.UID, opts.Modified = dav.CalendarUID, dav.CalendarModified
 	if req.Kind == "carddav" {
-		opts.UID = dav.ContactUID
+		opts.UID, opts.Modified = dav.ContactUID, dav.ContactModified
+	}
+	switch dav.Conflict(req.Conflict) {
+	case dav.NewestWins, dav.SourceWins, "":
+		opts.Conflict = dav.Conflict(req.Conflict)
+	default:
+		writeError(w, http.StatusBadRequest, "invalid conflict policy")
+		return
 	}
 
 	// Date window (CalDAV only): an explicit preview week wins, else the saved range.
@@ -253,7 +264,7 @@ func (s *Server) handleSyncPreview(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	a, b, err := buildPreviewCollections(req.Kind, req.AURL, req.AUsername, aPass, req.BURL, req.BUsername, bPass)
+	a, b, err := buildPreviewCollections(req.Kind, req.AURL, req.AUsername, aPass, req.BURL, req.BUsername, bPass, s.app.Config.AllowPrivateTargets)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -281,9 +292,14 @@ func (s *Server) handlePreviewSavedSyncJob(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	opts := dav.Options{Direction: dav.Direction(job.Direction), UID: dav.CalendarUID}
+	opts := dav.Options{
+		Direction: dav.Direction(job.Direction),
+		Conflict:  dav.Conflict(job.Conflict),
+		UID:       dav.CalendarUID,
+		Modified:  dav.CalendarModified,
+	}
 	if job.Kind == "carddav" {
-		opts.UID = dav.ContactUID
+		opts.UID, opts.Modified = dav.ContactUID, dav.ContactModified
 	} else {
 		if week := strings.TrimSpace(r.URL.Query().Get("week")); week != "" {
 			start, _, err := dav.ParseWindow(week, "")
@@ -297,7 +313,7 @@ func (s *Server) handlePreviewSavedSyncJob(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	a, b, err := buildPreviewCollections(job.Kind, job.AURL, job.AUsername, job.APassword, job.BURL, job.BUsername, job.BPassword)
+	a, b, err := buildPreviewCollections(job.Kind, job.AURL, job.AUsername, job.APassword, job.BURL, job.BUsername, job.BPassword, s.app.Config.AllowPrivateTargets)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -311,23 +327,23 @@ func (s *Server) handlePreviewSavedSyncJob(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, syncPreviewResponse{A: aOut, B: bOut, Merged: merged})
 }
 
-func buildPreviewCollections(kind, aURL, aUser, aPass, bURL, bUser, bPass string) (dav.Collection, dav.Collection, error) {
+func buildPreviewCollections(kind, aURL, aUser, aPass, bURL, bUser, bPass string, allowPrivate bool) (dav.Collection, dav.Collection, error) {
 	if kind == "carddav" {
-		a, err := dav.NewCardDAVCollection(strings.TrimSpace(aURL), aUser, aPass)
+		a, err := dav.NewCardDAVCollection(strings.TrimSpace(aURL), aUser, aPass, allowPrivate)
 		if err != nil {
 			return nil, nil, err
 		}
-		b, err := dav.NewCardDAVCollection(strings.TrimSpace(bURL), bUser, bPass)
+		b, err := dav.NewCardDAVCollection(strings.TrimSpace(bURL), bUser, bPass, allowPrivate)
 		if err != nil {
 			return nil, nil, err
 		}
 		return a, b, nil
 	}
-	a, err := dav.NewCalDAVCollection(strings.TrimSpace(aURL), aUser, aPass)
+	a, err := dav.NewCalDAVCollection(strings.TrimSpace(aURL), aUser, aPass, allowPrivate)
 	if err != nil {
 		return nil, nil, err
 	}
-	b, err := dav.NewCalDAVCollection(strings.TrimSpace(bURL), bUser, bPass)
+	b, err := dav.NewCalDAVCollection(strings.TrimSpace(bURL), bUser, bPass, allowPrivate)
 	if err != nil {
 		return nil, nil, err
 	}

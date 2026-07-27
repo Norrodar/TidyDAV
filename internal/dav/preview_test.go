@@ -2,6 +2,8 @@ package dav
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -80,6 +82,52 @@ func TestPreviewMergeWindow(t *testing.T) {
 	}
 	if len(aOut) != 1 || aOut[0].UID != "in" {
 		t.Fatalf("windowed A = %+v, want only the in-window event", aOut)
+	}
+}
+
+// A collection that suddenly lists nothing is treated as a broken endpoint, not
+// as "the user deleted everything" — otherwise a moved collection URL wipes the
+// other side.
+func TestSyncRefusesWhenCollectionVanishes(t *testing.T) {
+	ctx := context.Background()
+	src, dst := newFake(), newFake()
+	opts := Options{Direction: AToB, UID: CalendarUID}
+	st := NewState()
+
+	for i := 0; i < vanishGuardThreshold; i++ {
+		uid := fmt.Sprintf("u%d", i)
+		src.set("/"+uid, "1", vevent(uid, "Event "+uid, "20260115"))
+	}
+	if _, err := Sync(ctx, src, dst, st, opts); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
+	if len(dst.items) != vanishGuardThreshold {
+		t.Fatalf("dst has %d items, want %d", len(dst.items), vanishGuardThreshold)
+	}
+
+	// The source now lists nothing at all.
+	src.items = map[string]Item{}
+	_, err := Sync(ctx, src, dst, st, opts)
+	if !errors.Is(err, ErrCollectionVanished) {
+		t.Fatalf("sync error = %v, want ErrCollectionVanished", err)
+	}
+	if len(dst.items) != vanishGuardThreshold {
+		t.Errorf("destination was modified despite the guard: %d items left", len(dst.items))
+	}
+
+	// Deleting a handful by hand still propagates normally.
+	small, smallDst := newFake(), newFake()
+	smallState := NewState()
+	small.set("/only", "1", vevent("only", "Only", "20260115"))
+	if _, err := Sync(ctx, small, smallDst, smallState, opts); err != nil {
+		t.Fatalf("small sync: %v", err)
+	}
+	small.items = map[string]Item{}
+	if _, err := Sync(ctx, small, smallDst, smallState, opts); err != nil {
+		t.Fatalf("small delete sync: %v", err)
+	}
+	if len(smallDst.items) != 0 {
+		t.Error("a genuine small deletion should still propagate")
 	}
 }
 

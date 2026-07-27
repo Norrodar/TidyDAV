@@ -54,7 +54,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, version stri
 		Auth:    authSvc,
 		Feed:    feedSvc,
 		Audit:   audit.New(st, log),
-		Sync:    davsync.New(st, log),
+		Sync:    davsync.New(st, log, cfg.AllowPrivateTargets),
 		Version: version,
 	}, nil
 }

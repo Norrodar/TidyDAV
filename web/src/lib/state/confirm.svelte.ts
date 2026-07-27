@@ -10,6 +10,11 @@ class ConfirmState {
   private resolver: ((value: boolean) => void) | null = null;
 
   ask(message: string, confirmLabel = 'Confirm'): Promise<boolean> {
+    // Settle a dialog that is somehow still open: overwriting its resolver
+    // would leave the caller awaiting a promise that never resolves.
+    this.resolver?.(false);
+    this.resolver = null;
+
     this.message = message;
     this.confirmLabel = confirmLabel;
     this.open = true;

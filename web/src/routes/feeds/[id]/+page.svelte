@@ -12,7 +12,7 @@
   onMount(async () => {
     const id = $page.params.id;
     if (!id) {
-      error = 'missing feed id';
+      error = t('load_failed');
       return;
     }
     try {
@@ -22,7 +22,7 @@
         await goto('/login');
         return;
       }
-      error = e instanceof Error ? e.message : 'Failed to load feed';
+      error = e instanceof Error ? e.message : t('load_failed');
     }
   });
 </script>

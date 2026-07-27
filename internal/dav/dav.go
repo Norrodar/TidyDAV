@@ -8,6 +8,8 @@ package dav
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -114,4 +116,28 @@ type Result struct {
 	Created int
 	Updated int
 	Deleted int
+}
+
+// ErrCollectionVanished aborts a run in which one side suddenly lists nothing
+// although the previous run recorded a whole collection there. That pattern
+// almost always means a misconfigured or temporarily broken endpoint (a moved
+// collection URL, a server answering PROPFIND with an empty result) rather than
+// a genuine mass deletion — and propagating it would wipe the other side
+// irreversibly.
+var ErrCollectionVanished = errors.New(
+	"dav: refusing to sync: one side is empty although the previous run saw a full collection there; " +
+		"check the collection URLs, then recreate the job to accept the new state")
+
+// vanishGuardThreshold is how many previously known items make a suddenly empty
+// listing look like a broken endpoint rather than a user emptying a small
+// calendar by hand. Below it, deletions propagate as usual.
+const vanishGuardThreshold = 5
+
+// guardVanished reports ErrCollectionVanished when a non-trivial collection
+// listed nothing at all.
+func guardVanished(side string, listed, known int) error {
+	if listed == 0 && known >= vanishGuardThreshold {
+		return fmt.Errorf("%w (side %s: 0 listed, %d known)", ErrCollectionVanished, side, known)
+	}
+	return nil
 }

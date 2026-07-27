@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Norrodar/TidyDAV/internal/auth"
 	"github.com/Norrodar/TidyDAV/internal/config"
@@ -399,8 +401,12 @@ func (s *Server) handleICS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(body)
 
-	// Subscriber stats: record that a client fetched this calendar.
-	if err := s.app.Store.MarkFeedServed(r.Context(), f.ID); err != nil {
+	// Subscriber stats: record that a client fetched this calendar. The write
+	// outlives the request context, which is cancelled as soon as the client
+	// closes the connection after receiving the body.
+	statsCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+	defer cancel()
+	if err := s.app.Store.MarkFeedServed(statsCtx, f.ID); err != nil {
 		s.app.Log.Warn("mark feed served", "feed", f.ID, "error", err)
 	}
 }

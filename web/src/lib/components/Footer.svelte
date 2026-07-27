@@ -65,10 +65,14 @@
     {#if latest && !upToDate}
       <span class="meta">
         {t('footer_latest')}:
-        <a href={latestUrl} target="_blank" rel="noreferrer noopener"><code>{short(latest)}</code></a>
+        <a href={latestUrl} target="_blank" rel="noreferrer noopener"
+          ><code>{short(latest)}</code></a
+        >
       </span>
     {/if}
-    <a class="meta link" href={repoUrl} target="_blank" rel="noreferrer noopener">{t('footer_source')} ↗</a>
+    <a class="meta link" href={repoUrl} target="_blank" rel="noreferrer noopener"
+      >{t('footer_source')} ↗</a
+    >
   </div>
 </footer>
 

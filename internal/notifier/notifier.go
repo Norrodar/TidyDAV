@@ -19,14 +19,16 @@ const retention = 30 * 24 * time.Hour
 
 // Notifier dispatches feed notifications.
 type Notifier struct {
-	store *store.Store
-	feeds *feed.Service
-	log   *slog.Logger
+	store        *store.Store
+	feeds        *feed.Service
+	log          *slog.Logger
+	allowPrivate bool
 }
 
-// New creates a Notifier.
-func New(st *store.Store, feeds *feed.Service, log *slog.Logger) *Notifier {
-	return &Notifier{store: st, feeds: feeds, log: log}
+// New creates a Notifier. allowPrivate mirrors TIDYDAV_ALLOW_PRIVATE_TARGETS
+// and gates whether notification targets may resolve to non-public addresses.
+func New(st *store.Store, feeds *feed.Service, log *slog.Logger, allowPrivate bool) *Notifier {
+	return &Notifier{store: st, feeds: feeds, log: log, allowPrivate: allowPrivate}
 }
 
 // Run evaluates every feed's notification triggers and dispatches notifications
@@ -64,25 +66,34 @@ func (n *Notifier) runFeed(ctx context.Context, f *store.Feed) {
 		return
 	}
 
-	disp := cfg.Dispatcher(n.log)
+	disp := cfg.Dispatcher(n.log, n.allowPrivate)
 	for _, m := range matches {
 		if !cfg.Triggered(m.Rule) {
 			continue
 		}
 		for _, ev := range m.Events {
-			isNew, err := n.store.MarkNotified(ctx, f.ID, m.Rule+"|"+eventKey(ev))
+			key := m.Rule + "|" + eventKey(ev)
+			isNew, err := n.store.MarkNotified(ctx, f.ID, key)
 			if err != nil {
 				n.log.Warn("mark notified failed", "feed", f.ID, "error", err)
 				continue
 			}
-			if isNew {
-				disp.Dispatch(ctx, notify.Event{
-					Feed:    f.Name,
-					Rule:    m.Rule,
-					Summary: ev.Summary,
-					Message: m.Rule + " matched: " + ev.Summary,
-					Time:    time.Now(),
-				})
+			if !isNew {
+				continue
+			}
+			if err := disp.Dispatch(ctx, notify.Event{
+				Feed:    f.Name,
+				Rule:    m.Rule,
+				Summary: ev.Summary,
+				Message: m.Rule + " matched: " + ev.Summary,
+				Time:    time.Now(),
+			}); err != nil {
+				// Nothing got through: drop the ledger entry so the next run
+				// retries instead of treating the event as announced.
+				n.log.Warn("notification undeliverable; will retry", "feed", f.ID, "error", err)
+				if err := n.store.UnmarkNotified(ctx, f.ID, key); err != nil {
+					n.log.Warn("roll back notified ledger failed", "feed", f.ID, "error", err)
+				}
 			}
 		}
 	}

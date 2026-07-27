@@ -43,7 +43,11 @@ func buildNotifications(req *notificationsDTO, existing *store.Feed) (json.RawMe
 		GotifyToken:  req.GotifyToken,
 		Triggers:     req.Triggers,
 	}
-	if n.GotifyToken == "" && existing != nil {
+	// The token is write-only, so an omitted one means "keep the stored token" —
+	// but only while the channel is still configured. Clearing the server (the
+	// UI does that when the Gotify chip is switched off) drops the token too,
+	// which is the only way to remove a stored secret.
+	if n.GotifyToken == "" && n.GotifyServer != "" && existing != nil {
 		if prev := parseNotifications(existing.Notifications); prev.GotifyToken != "" {
 			n.GotifyToken = prev.GotifyToken
 		}

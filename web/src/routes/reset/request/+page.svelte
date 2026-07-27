@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { api, ApiError } from '$lib/api';
 
   let email = $state('');
@@ -14,7 +15,7 @@
       await api.requestPasswordReset(email);
       done = true;
     } catch (err) {
-      error = err instanceof ApiError ? err.message : 'Request failed';
+      error = err instanceof ApiError ? err.message : t('save_failed');
     } finally {
       submitting = false;
     }
@@ -23,23 +24,23 @@
 
 <div class="auth">
   <div class="card">
-    <h1>Reset password</h1>
+    <h1>{t('reset_password')}</h1>
     {#if done}
-      <p class="subtitle">If an account exists for that address, a reset link is on its way.</p>
-      <a class="button button-secondary" href="/login">Back to sign in</a>
+      <p class="subtitle">{t('reset_sent')}</p>
+      <a class="button button-secondary" href="/login">{t('back_to_sign_in')}</a>
     {:else}
-      <p class="subtitle">Enter your email and we'll send a reset link.</p>
+      <p class="subtitle">{t('reset_password_sub')}</p>
       <form onsubmit={submit}>
         <label>
-          <span>Email</span>
+          <span>{t('email')}</span>
           <input class="input" type="email" bind:value={email} autocomplete="username" required />
         </label>
         {#if error}<p class="error">{error}</p>{/if}
         <button class="button" type="submit" disabled={submitting}>
-          {submitting ? 'Sending…' : 'Send reset link'}
+          {submitting ? t('sending') : t('send_reset_link')}
         </button>
       </form>
-      <p class="hint"><a href="/login">Back to sign in</a></p>
+      <p class="hint"><a href="/login">{t('back_to_sign_in')}</a></p>
     {/if}
   </div>
 </div>

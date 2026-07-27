@@ -38,6 +38,11 @@ func NewFilterRule(mode FilterMode, matchMode MatchMode, pattern string, fields 
 	default:
 		return nil, fmt.Errorf("pipeline: unknown filter mode %q", mode)
 	}
+	// An empty pattern matches every event, which would silently blank the whole
+	// calendar (blacklist) or keep it entirely (whitelist). Reject it instead.
+	if strings.TrimSpace(pattern) == "" {
+		return nil, fmt.Errorf("pipeline: filter pattern must not be empty")
+	}
 	m, err := NewMatcher(matchMode, pattern)
 	if err != nil {
 		return nil, err
@@ -245,6 +250,89 @@ func (r *StripRule) Apply(cal *ical.Calendar) error {
 	return nil
 }
 
+// ── Alarm ────────────────────────────────────────────────────────────────────
+
+// AlarmRule attaches a display reminder to every event, so the calendar client
+// itself notifies ahead of time (e.g. "bin day tomorrow evening"). Any alarms
+// the upstream feed carried are replaced, so a client never fires twice for the
+// same event.
+type AlarmRule struct {
+	lead time.Duration
+	text string
+}
+
+// NewAlarmRule builds an alarm rule firing minutesBefore minutes ahead of an
+// event's start. An empty text falls back to the event's own summary.
+func NewAlarmRule(minutesBefore int, text string) (*AlarmRule, error) {
+	if minutesBefore < 0 {
+		return nil, fmt.Errorf("pipeline: alarm lead time must be >= 0, got %d", minutesBefore)
+	}
+	return &AlarmRule{lead: time.Duration(minutesBefore) * time.Minute, text: strings.TrimSpace(text)}, nil
+}
+
+// Name implements Rule.
+func (r *AlarmRule) Name() string { return "alarm" }
+
+// Apply implements Rule.
+func (r *AlarmRule) Apply(cal *ical.Calendar) error {
+	for _, e := range cal.Events() {
+		kept := make([]*ical.Component, 0, len(e.Children))
+		for _, child := range e.Children {
+			if child.Name != ical.CompAlarm {
+				kept = append(kept, child)
+			}
+		}
+		text := r.text
+		if text == "" {
+			text = ics.Text(e, ics.FieldSummary)
+		}
+		if text == "" {
+			text = "Reminder"
+		}
+		e.Children = append(kept, buildAlarm(r.lead, text))
+	}
+	return nil
+}
+
+func buildAlarm(lead time.Duration, text string) *ical.Component {
+	alarm := ical.NewComponent(ical.CompAlarm)
+	alarm.Props.SetText(ical.PropAction, "DISPLAY")
+	alarm.Props.SetText(ical.PropDescription, text)
+	// TRIGGER is a DURATION relative to DTSTART; negative means "before".
+	trigger := ical.NewProp(ical.PropTrigger)
+	trigger.Value = negativeDuration(lead)
+	alarm.Props.Set(trigger)
+	return alarm
+}
+
+// negativeDuration renders a lead time as an ISO 8601 duration preceded by a
+// minus sign, e.g. 6h -> "-PT6H", 26h -> "-P1DT2H", 0 -> "PT0S".
+func negativeDuration(d time.Duration) string {
+	if d <= 0 {
+		return "PT0S"
+	}
+	totalMinutes := int(d / time.Minute)
+	days := totalMinutes / (24 * 60)
+	hours := (totalMinutes % (24 * 60)) / 60
+	minutes := totalMinutes % 60
+
+	var sb strings.Builder
+	sb.WriteString("-P")
+	if days > 0 {
+		fmt.Fprintf(&sb, "%dD", days)
+	}
+	if hours > 0 || minutes > 0 {
+		sb.WriteString("T")
+		if hours > 0 {
+			fmt.Fprintf(&sb, "%dH", hours)
+		}
+		if minutes > 0 {
+			fmt.Fprintf(&sb, "%dM", minutes)
+		}
+	}
+	return sb.String()
+}
+
 // ── Timezone ─────────────────────────────────────────────────────────────────
 
 // TimezoneRule converts DTSTART/DTEND of timed events into a target timezone.
@@ -274,31 +362,39 @@ func NewTimezoneRule(target, floatingDefault string) (*TimezoneRule, error) {
 // Name implements Rule.
 func (r *TimezoneRule) Name() string { return "timezone" }
 
-// Apply implements Rule.
+// Apply implements Rule. A value it cannot parse — most often a non-IANA TZID
+// such as Outlook's "W. Europe Standard Time" — is left as it is: dropping the
+// whole feed over one unconvertible event would be far worse than serving that
+// event in its original zone.
 func (r *TimezoneRule) Apply(cal *ical.Calendar) error {
 	for _, e := range cal.Events() {
 		for _, field := range []string{ics.FieldDTStart, ics.FieldDTEnd} {
-			if err := r.convert(e, field); err != nil {
-				return err
-			}
+			r.convert(e, field)
 		}
 	}
 	return nil
 }
 
-func (r *TimezoneRule) convert(e ical.Event, field string) error {
+func (r *TimezoneRule) convert(e ical.Event, field string) {
 	prop := e.Props.Get(field)
 	if prop == nil || ics.IsDateOnly(prop) {
-		return nil // absent or all-day value: leave untouched
+		return // absent or all-day value: leave untouched
 	}
 	t, err := prop.DateTime(r.floating)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", field, err)
+		return // unparseable/unknown timezone: keep the original value
 	}
 	np := ical.NewProp(field)
 	np.SetDateTime(t.In(r.target))
+	// Preserve any other parameters the original carried (TZID is replaced by
+	// SetDateTime, everything else would otherwise be lost).
+	for name, values := range prop.Params {
+		if name == ical.PropTimezoneID || name == "VALUE" {
+			continue
+		}
+		np.Params[name] = values
+	}
 	e.Props.Set(np)
-	return nil
 }
 
 // ── Expire ───────────────────────────────────────────────────────────────────
@@ -320,13 +416,15 @@ func NewExpireRule(days int) (*ExpireRule, error) {
 // Name implements Rule.
 func (r *ExpireRule) Name() string { return "expire" }
 
-// Apply implements Rule.
+// Apply implements Rule. Recurring events are judged by their final occurrence,
+// so an open-ended series (a weekly meeting, a yearly birthday) is never dropped
+// just because it started long ago.
 func (r *ExpireRule) Apply(cal *ical.Calendar) error {
 	cutoff := r.now().Add(-r.maxAge)
 	ics.FilterEvents(cal, func(e ical.Event) bool {
-		end, err := e.DateTimeEnd(time.UTC)
-		if err != nil || end.IsZero() {
-			return true // keep events we cannot date
+		end, bounded := ics.LastOccurrence(e)
+		if !bounded {
+			return true // undatable or open-ended: keep
 		}
 		return !end.Before(cutoff)
 	})

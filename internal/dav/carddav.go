@@ -21,8 +21,8 @@ type CardDAVCollection struct {
 
 // NewCardDAVCollection connects to the CardDAV address book at endpoint,
 // optionally authenticating with HTTP Basic Auth.
-func NewCardDAVCollection(endpoint, username, password string) (*CardDAVCollection, error) {
-	client, err := carddav.NewClient(davHTTPClient(username, password), endpoint)
+func NewCardDAVCollection(endpoint, username, password string, allowPrivate bool) (*CardDAVCollection, error) {
+	client, err := carddav.NewClient(davHTTPClient(username, password, allowPrivate), endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("dav: carddav client: %w", err)
 	}

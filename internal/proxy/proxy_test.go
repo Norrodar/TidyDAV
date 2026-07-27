@@ -21,8 +21,8 @@ type fakeCache struct {
 
 func newFakeCache() *fakeCache { return &fakeCache{m: map[string]*store.CachedFeed{}} }
 
-func (c *fakeCache) GetCachedFeed(_ context.Context, url string) (*store.CachedFeed, error) {
-	if v, ok := c.m[url]; ok {
+func (c *fakeCache) GetCachedFeed(_ context.Context, key string) (*store.CachedFeed, error) {
+	if v, ok := c.m[key]; ok {
 		cp := *v
 		return &cp, nil
 	}
@@ -31,8 +31,58 @@ func (c *fakeCache) GetCachedFeed(_ context.Context, url string) (*store.CachedF
 
 func (c *fakeCache) PutCachedFeed(_ context.Context, cf *store.CachedFeed) error {
 	cp := *cf
-	c.m[cf.URL] = &cp
+	key := cf.Key
+	if key == "" {
+		key = cf.URL
+	}
+	c.m[key] = &cp
 	return nil
+}
+
+// A copy fetched with credentials must never be handed to a request that
+// supplies none — neither as a fresh hit nor as stale-on-error — otherwise one
+// user could read another's private calendar just by knowing the URL.
+func TestCacheIsScopedToCredentials(t *testing.T) {
+	var unauthorized int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, pass, _ := r.BasicAuth()
+		if user != "alice" || pass != "s3cret" {
+			atomic.AddInt32(&unauthorized, 1)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte("PRIVATE"))
+	}))
+	defer srv.Close()
+
+	cache := newFakeCache()
+	f := NewFetcher(cache, testLogger(), true)
+	ctx := context.Background()
+
+	// The owner populates the cache.
+	body, _, err := f.FetchAuth(ctx, srv.URL, time.Hour, "alice", "s3cret")
+	if err != nil || string(body) != "PRIVATE" {
+		t.Fatalf("owner fetch = %q, %v", body, err)
+	}
+
+	// Another user asks for the same URL without credentials: a fresh-cache hit
+	// must not happen, and the 401 must not fall back to the cached body.
+	if _, _, err := f.FetchAuth(ctx, srv.URL, time.Hour, "", ""); err == nil {
+		t.Fatal("anonymous fetch succeeded; the cached private body leaked")
+	}
+	if atomic.LoadInt32(&unauthorized) == 0 {
+		t.Error("anonymous request never reached upstream — it was served from cache")
+	}
+
+	// Wrong credentials must not reach the cached copy either.
+	if _, _, err := f.FetchAuth(ctx, srv.URL, time.Hour, "mallory", "guess"); err == nil {
+		t.Error("fetch with wrong credentials succeeded; cached body leaked")
+	}
+
+	// The owner still gets a cached hit.
+	if _, src, err := f.FetchAuth(ctx, srv.URL, time.Hour, "alice", "s3cret"); err != nil || src != SourceCacheFresh {
+		t.Errorf("owner refetch = source %v, %v; want fresh cache hit", src, err)
+	}
 }
 
 func TestFetchFreshCacheSkipsUpstream(t *testing.T) {

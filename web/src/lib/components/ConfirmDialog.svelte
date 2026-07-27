@@ -1,5 +1,12 @@
 <script lang="ts">
   import { confirmDialog } from '$lib/state/confirm.svelte';
+  import { t } from '$lib/i18n';
+
+  // Move focus into the dialog so keyboard users are not left on the button
+  // behind the overlay (where Enter would re-trigger the original action).
+  function focusDialog(node: HTMLElement) {
+    node.querySelector<HTMLButtonElement>('.actions button')?.focus();
+  }
 
   function onKeydown(event: KeyboardEvent) {
     if (confirmDialog.open && event.key === 'Escape') confirmDialog.cancel();
@@ -10,11 +17,18 @@
 
 {#if confirmDialog.open}
   <div class="overlay">
-    <button class="overlay-bg" aria-label="Cancel" onclick={() => confirmDialog.cancel()}></button>
-    <div class="dialog" role="dialog" aria-modal="true">
+    <button
+      class="overlay-bg"
+      tabindex="-1"
+      aria-hidden="true"
+      onclick={() => confirmDialog.cancel()}
+    ></button>
+    <div class="dialog" role="dialog" aria-modal="true" use:focusDialog>
       <p class="message">{confirmDialog.message}</p>
       <div class="actions">
-        <button class="button button-secondary" onclick={() => confirmDialog.cancel()}>Cancel</button>
+        <button class="button button-secondary" onclick={() => confirmDialog.cancel()}
+          >{t('cancel')}</button
+        >
         <button class="button danger" onclick={() => confirmDialog.confirm()}>
           {confirmDialog.confirmLabel}
         </button>

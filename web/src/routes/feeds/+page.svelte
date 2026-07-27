@@ -12,7 +12,11 @@
   let copied = $state<string | null>(null);
 
   // Per-feed quick preview state, keyed by feed id.
-  type PreviewState = { status: 'loading' | 'ok' | 'error'; result?: PreviewResult; message?: string };
+  type PreviewState = {
+    status: 'loading' | 'ok' | 'error';
+    result?: PreviewResult;
+    message?: string;
+  };
   let previews = $state<Record<string, PreviewState | undefined>>({});
 
   const PREVIEW_LIMIT = 8;
@@ -91,7 +95,7 @@
         await goto('/login');
         return;
       }
-      error = e instanceof Error ? e.message : 'Failed to load feeds';
+      error = e instanceof Error ? e.message : t('load_failed');
     } finally {
       loading = false;
     }
@@ -100,7 +104,8 @@
   onMount(load);
 
   async function remove(feed: Feed) {
-    if (!(await confirmDialog.ask(tf('delete_calendar_confirm', { name: feed.name }), t('delete')))) return;
+    if (!(await confirmDialog.ask(tf('delete_calendar_confirm', { name: feed.name }), t('delete'))))
+      return;
     try {
       await api.feeds.remove(feed.id);
       feeds = feeds.filter((f) => f.id !== feed.id);
@@ -112,7 +117,7 @@
 
   async function copy(url: string) {
     if (!navigator.clipboard?.writeText) {
-      error = 'Copy failed — select the URL manually.';
+      error = t('copy_failed');
       return;
     }
     try {
@@ -120,7 +125,7 @@
       copied = url;
       setTimeout(() => (copied = null), 1500);
     } catch {
-      error = 'Copy failed — select the URL manually.';
+      error = t('copy_failed');
     }
   }
 </script>
@@ -146,7 +151,10 @@
         <div class="feed">
           <div class="info">
             <h2>
-              <span class="health {worstHealth(feed)}" title={feed.sources.map((s) => healthTitle(s.lastFetchedAt)).join('\n')}></span>
+              <span
+                class="health {worstHealth(feed)}"
+                title={feed.sources.map((s) => healthTitle(s.lastFetchedAt)).join('\n')}
+              ></span>
               {feed.name}
             </h2>
             <code class="url">{feed.icsUrl}</code>
@@ -155,7 +163,10 @@
             {/if}
             <p class="stats">
               {feed.lastServedAt
-                ? tf('client_last_fetch', { time: fmtDateTime(feed.lastServedAt), n: feed.serveCount })
+                ? tf('client_last_fetch', {
+                    time: fmtDateTime(feed.lastServedAt),
+                    n: feed.serveCount
+                  })
                 : t('client_never')}
             </p>
           </div>
@@ -172,7 +183,9 @@
               {copied === feed.icsUrl ? t('copied') : t('copy_url')}
             </button>
             <a class="button button-secondary" href={`/feeds/${feed.id}`}>{t('edit')}</a>
-            <button class="button button-secondary danger" onclick={() => remove(feed)}>{t('delete')}</button>
+            <button class="button button-secondary danger" onclick={() => remove(feed)}
+              >{t('delete')}</button
+            >
           </div>
         </div>
 
@@ -196,12 +209,17 @@
                       {/each}
                     </ul>
                     {#if p.result.original.length > PREVIEW_LIMIT}
-                      <p class="muted">{tf('preview_more', { n: p.result.original.length - PREVIEW_LIMIT })}</p>
+                      <p class="muted">
+                        {tf('preview_more', { n: p.result.original.length - PREVIEW_LIMIT })}
+                      </p>
                     {/if}
                   {/if}
                 </div>
                 <div class="diff-col transformed">
-                  <h3>{t('transformed')} <span class="badge badge-ok">{p.result.transformed.length}</span></h3>
+                  <h3>
+                    {t('transformed')}
+                    <span class="badge badge-ok">{p.result.transformed.length}</span>
+                  </h3>
                   {#if p.result.transformed.length === 0}
                     <p class="muted">{t('no_entries')}</p>
                   {:else}
@@ -211,7 +229,9 @@
                       {/each}
                     </ul>
                     {#if p.result.transformed.length > PREVIEW_LIMIT}
-                      <p class="muted">{tf('preview_more', { n: p.result.transformed.length - PREVIEW_LIMIT })}</p>
+                      <p class="muted">
+                        {tf('preview_more', { n: p.result.transformed.length - PREVIEW_LIMIT })}
+                      </p>
                     {/if}
                   {/if}
                 </div>

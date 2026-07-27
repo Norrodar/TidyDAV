@@ -28,7 +28,9 @@
   let bUrl = $state(initial?.bUrl ?? '');
   let bUsername = $state(initial?.bUsername ?? '');
   let bPassword = $state('');
-  let intervalMinutes = $state(initial ? Math.max(1, Math.round(initial.intervalSeconds / 60)) : 15);
+  let intervalMinutes = $state(
+    initial ? Math.max(1, Math.round(initial.intervalSeconds / 60)) : 15
+  );
   let enabled = $state(initial?.enabled ?? true);
   let rangeEnabled = $state(!!(initial?.windowStart || initial?.windowEnd));
   let windowStart = $state(initial?.windowStart ?? '');
@@ -75,6 +77,10 @@
       toasts.show(job ? t('sync_job_saved') : t('sync_job_created'));
       await goto('/sync');
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        await goto('/login');
+        return;
+      }
       error = e instanceof ApiError ? e.message : t('save_failed');
     } finally {
       saving = false;
@@ -92,6 +98,7 @@
         {
           kind,
           direction,
+          conflict,
           aUrl: aUrl.trim(),
           aUsername: aUsername || undefined,
           aPassword: aPassword || undefined,
@@ -103,6 +110,10 @@
         job?.id
       );
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        await goto('/login');
+        return;
+      }
       error = e instanceof ApiError ? e.message : t('preview_failed');
     } finally {
       previewing = false;
@@ -116,7 +127,12 @@
   }
 </script>
 
-<form onsubmit={(e) => { e.preventDefault(); save(); }}>
+<form
+  onsubmit={(e) => {
+    e.preventDefault();
+    save();
+  }}
+>
   <section class="card">
     <label class="field">
       <span>{t('name')}</span>
@@ -147,7 +163,12 @@
       <h2>{t('server_a')}</h2>
       <label class="field">
         <span>{t('collection_url')}</span>
-        <input class="input" bind:value={aUrl} placeholder="https://a.example.com/dav/cal/" required />
+        <input
+          class="input"
+          bind:value={aUrl}
+          placeholder="https://a.example.com/dav/cal/"
+          required
+        />
       </label>
       <div class="row wrap">
         <label class="field grow">
@@ -156,23 +177,56 @@
         </label>
         <label class="field grow">
           <span>{t('password')}</span>
-          <input class="input" type="password" bind:value={aPassword} autocomplete="new-password" placeholder={initial?.aPasswordSet ? t('unchanged') : ''} />
+          <input
+            class="input"
+            type="password"
+            bind:value={aPassword}
+            autocomplete="new-password"
+            placeholder={initial?.aPasswordSet ? t('unchanged') : ''}
+          />
         </label>
       </div>
     </section>
 
     <div class="flow">
-      <button type="button" class="flow-btn" onclick={cycleDirection} title={t('flow_hint')} aria-label={t(flowKey(direction))}>
+      <button
+        type="button"
+        class="flow-btn"
+        onclick={cycleDirection}
+        title={t('flow_hint')}
+        aria-label={t(flowKey(direction))}
+      >
         {#if direction === 'a-to-b'}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <line x1="4" y1="12" x2="20" y2="12" /><polyline points="14 6 20 12 14 18" />
           </svg>
         {:else if direction === 'b-to-a'}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <line x1="20" y1="12" x2="4" y2="12" /><polyline points="10 6 4 12 10 18" />
           </svg>
         {:else}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <polyline points="7 4 3 8 7 12" /><line x1="3" y1="8" x2="21" y2="8" />
             <polyline points="17 12 21 16 17 20" /><line x1="21" y1="16" x2="3" y2="16" />
           </svg>
@@ -185,7 +239,12 @@
       <h2>{t('server_b')}</h2>
       <label class="field">
         <span>{t('collection_url')}</span>
-        <input class="input" bind:value={bUrl} placeholder="https://b.example.com/dav/cal/" required />
+        <input
+          class="input"
+          bind:value={bUrl}
+          placeholder="https://b.example.com/dav/cal/"
+          required
+        />
       </label>
       <div class="row wrap">
         <label class="field grow">
@@ -194,7 +253,13 @@
         </label>
         <label class="field grow">
           <span>{t('password')}</span>
-          <input class="input" type="password" bind:value={bPassword} autocomplete="new-password" placeholder={initial?.bPasswordSet ? t('unchanged') : ''} />
+          <input
+            class="input"
+            type="password"
+            bind:value={bPassword}
+            autocomplete="new-password"
+            placeholder={initial?.bPasswordSet ? t('unchanged') : ''}
+          />
         </label>
       </div>
     </section>
@@ -211,9 +276,23 @@
       {#if panelOpen}
         {#if kind === 'caldav'}
           <div class="week-nav">
-            <button type="button" class="button button-secondary button-sm" onclick={() => { weekOffset--; runPreview(); }}>‹ {t('prev_week')}</button>
+            <button
+              type="button"
+              class="button button-secondary button-sm"
+              onclick={() => {
+                weekOffset--;
+                runPreview();
+              }}>‹ {t('prev_week')}</button
+            >
             <span class="week-label">{tf('this_week', { date: weekLabel })}</span>
-            <button type="button" class="button button-secondary button-sm" onclick={() => { weekOffset++; runPreview(); }}>{t('next_week')} ›</button>
+            <button
+              type="button"
+              class="button button-secondary button-sm"
+              onclick={() => {
+                weekOffset++;
+                runPreview();
+              }}>{t('next_week')} ›</button
+            >
           </div>
         {/if}
         <div class="three">
@@ -234,7 +313,10 @@
             </ul>
           </div>
           <div class="col result">
-            <h3>{t('result')} ({t(flowKey(direction))}) <span class="badge badge-ok">{preview.merged.length}</span></h3>
+            <h3>
+              {t('result')} ({t(flowKey(direction))})
+              <span class="badge badge-ok">{preview.merged.length}</span>
+            </h3>
             <ul>
               {#each preview.merged as e, i (i)}
                 <li><span class="when">{fmtWhen(e.when)}</span> {e.title || e.uid}</li>
@@ -248,21 +330,31 @@
 
   <section class="card">
     <label class="check">
-      <input type="checkbox" bind:checked={enabled} /> {t('enable_recurring')}
+      <input type="checkbox" bind:checked={enabled} />
+      {t('enable_recurring')}
     </label>
     <div class="row interval" class:disabled={!enabled}>
       <label class="field">
         <span>{t('interval_minutes')}</span>
-        <input class="input narrow" type="number" min="1" bind:value={intervalMinutes} disabled={!enabled} />
+        <input
+          class="input narrow"
+          type="number"
+          min="1"
+          bind:value={intervalMinutes}
+          disabled={!enabled}
+        />
       </label>
-      <span class="status">{enabled ? tf('status_every', { n: intervalMinutes }) : t('status_one_time')}</span>
+      <span class="status"
+        >{enabled ? tf('status_every', { n: intervalMinutes }) : t('status_one_time')}</span
+      >
     </div>
   </section>
 
   {#if kind === 'caldav'}
     <section class="card">
       <label class="check">
-        <input type="checkbox" bind:checked={rangeEnabled} /> {t('limit_date_range')}
+        <input type="checkbox" bind:checked={rangeEnabled} />
+        {t('limit_date_range')}
       </label>
       {#if rangeEnabled}
         <div class="row wrap">
@@ -282,7 +374,12 @@
   {#if error}<p class="error">{error}</p>{/if}
 
   <div class="actions">
-    <button type="button" class="button button-secondary" onclick={runPreview} disabled={previewing}>
+    <button
+      type="button"
+      class="button button-secondary"
+      onclick={runPreview}
+      disabled={previewing}
+    >
       {previewing ? t('previewing') : t('load_preview_week')}
     </button>
     <button type="submit" class="button" disabled={saving}>
