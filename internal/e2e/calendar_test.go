@@ -274,6 +274,69 @@ func TestBasicAuthRequiresUsername(t *testing.T) {
 	}).expect(http.StatusBadRequest)
 }
 
+// The served ICS must introduce itself: a calendar app subscribing to the link
+// shows the configured name, and — when a cached copy exists — is told how
+// often to look for new entries.
+func TestServedCalendarCarriesNameAndRefreshInterval(t *testing.T) {
+	up := newUpstream(t, calendar(vevent("i@up", "Bin day", "20260702T090000Z")))
+	in := newInstance(t)
+	c := in.newClient()
+	c.register("identity@example.com")
+
+	// A name with the three RFC 5545 separators must survive escaping.
+	const name = `Waste, Rostock; "north"\east`
+	feed := c.createFeed(map[string]any{
+		"name":       name,
+		"sources":    []map[string]any{{"url": up.URL}},
+		"rules":      []map[string]any{},
+		"ttlSeconds": 3600,
+	})
+	body := in.anonymous().get(icsPath(t, feed.ICSURL)).expect(http.StatusOK).text()
+
+	for _, want := range []string{
+		`X-WR-CALNAME:Waste\, Rostock\; "north"\\east`,
+		`NAME:Waste\, Rostock\; "north"\\east`,
+		"REFRESH-INTERVAL;VALUE=DURATION:PT1H",
+		"X-PUBLISHED-TTL:PT1H",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("served feed is missing %q:\n%s", want, body)
+		}
+	}
+
+	// Without a cached copy nothing is promised about the poll rate.
+	noTTL := c.createFeed(map[string]any{
+		"name": "Uncached", "sources": []map[string]any{{"url": up.URL}},
+		"rules": []map[string]any{}, "ttlSeconds": 0,
+	})
+	body = in.anonymous().get(icsPath(t, noTTL.ICSURL)).expect(http.StatusOK).text()
+	if !strings.Contains(body, "X-WR-CALNAME:Uncached") {
+		t.Errorf("name missing without TTL:\n%s", body)
+	}
+	if strings.Contains(body, "REFRESH-INTERVAL") || strings.Contains(body, "X-PUBLISHED-TTL") {
+		t.Errorf("TTL 0 must publish no refresh interval:\n%s", body)
+	}
+
+	// A calendar whose events are all filtered away keeps its identity.
+	emptied := c.createFeed(map[string]any{
+		"name": "Nothing left", "sources": []map[string]any{{"url": up.URL}},
+		"rules": []map[string]any{
+			{"type": "filter", "filterMode": "whitelist", "matchMode": "substring",
+				"pattern": "no-such-event", "fields": []string{"SUMMARY"}},
+		},
+		"ttlSeconds": 86400,
+	})
+	body = in.anonymous().get(icsPath(t, emptied.ICSURL)).expect(http.StatusOK).text()
+	if countLines(body, "BEGIN:VEVENT") != 0 {
+		t.Fatalf("expected an event-less calendar:\n%s", body)
+	}
+	for _, want := range []string{"X-WR-CALNAME:Nothing left", "X-PUBLISHED-TTL:P1D", "END:VCALENDAR"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("event-less feed is missing %q:\n%s", want, body)
+		}
+	}
+}
+
 // uidLines extracts the UID lines of an ICS document for comparison.
 func uidLines(body string) string {
 	var out []string

@@ -306,31 +306,13 @@ func buildAlarm(lead time.Duration, text string) *ical.Component {
 }
 
 // negativeDuration renders a lead time as an ISO 8601 duration preceded by a
-// minus sign, e.g. 6h -> "-PT6H", 26h -> "-P1DT2H", 0 -> "PT0S".
+// minus sign, e.g. 6h -> "-PT6H", 26h -> "-P1DT2H", 0 -> "PT0S". The formatting
+// itself lives in internal/ics so there is exactly one implementation.
 func negativeDuration(d time.Duration) string {
-	if d <= 0 {
-		return "PT0S"
+	if d < time.Minute {
+		return ics.Duration(0)
 	}
-	totalMinutes := int(d / time.Minute)
-	days := totalMinutes / (24 * 60)
-	hours := (totalMinutes % (24 * 60)) / 60
-	minutes := totalMinutes % 60
-
-	var sb strings.Builder
-	sb.WriteString("-P")
-	if days > 0 {
-		fmt.Fprintf(&sb, "%dD", days)
-	}
-	if hours > 0 || minutes > 0 {
-		sb.WriteString("T")
-		if hours > 0 {
-			fmt.Fprintf(&sb, "%dH", hours)
-		}
-		if minutes > 0 {
-			fmt.Fprintf(&sb, "%dM", minutes)
-		}
-	}
-	return sb.String()
+	return "-" + ics.Duration(d)
 }
 
 // ── Timezone ─────────────────────────────────────────────────────────────────

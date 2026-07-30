@@ -485,10 +485,13 @@
     }}
   >
     <section class="card">
-      <label class="field">
-        <span>{t('name')}</span>
-        <input class="input" bind:value={name} placeholder={t('name_placeholder')} required />
-      </label>
+      <div class="field-group">
+        <label class="field">
+          <span>{t('name')}</span>
+          <input class="input" bind:value={name} placeholder={t('name_placeholder')} required />
+        </label>
+        <p class="field-hint">{t('name_hint')}</p>
+      </div>
     </section>
 
     <section class="card">
@@ -791,6 +794,7 @@
         >
         <p class="opt-desc">{t('cache_desc')}</p>
         {#if cacheEnabled}
+          <p class="opt-desc">{t('cache_refresh_hint')}</p>
           <label class="field">
             <span>{t('cache_ttl')}</span>
             <input class="input narrow" type="number" min="1" bind:value={ttlMinutes} />
@@ -1158,6 +1162,18 @@
   }
   .opt-desc {
     margin: 0 0 0 calc(16px + var(--space-2));
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+  }
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  /* Like .opt-desc, but without the indent that clears a checkbox. */
+  .field-hint {
+    margin: 0;
     color: var(--text-tertiary);
     font-size: var(--text-xs);
     line-height: 1.5;

@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Norrodar/TidyDAV/internal/ics"
@@ -20,10 +21,6 @@ import (
 	"github.com/Norrodar/TidyDAV/internal/store"
 	"github.com/emersion/go-ical"
 )
-
-// emptyCalendar is a valid, event-less ICS document (go-ical refuses to encode
-// a calendar with no components, so the empty case is built by hand).
-const emptyCalendar = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//TidyDAV//EN\r\nEND:VCALENDAR\r\n"
 
 // Service renders feeds.
 type Service struct {
@@ -58,9 +55,6 @@ func (s *Service) Render(ctx context.Context, f *store.Feed) ([]byte, error) {
 	}
 	if err := p.Apply(merged); err != nil {
 		return nil, fmt.Errorf("feed %s: %w", f.ID, err)
-	}
-	if len(merged.Children) == 0 {
-		return []byte(emptyCalendar), nil
 	}
 	s.attachTimezones(merged, tzdefs)
 	var buf bytes.Buffer
@@ -122,15 +116,40 @@ func (s *Service) CheckSource(ctx context.Context, url, username, password strin
 	return len(cal.Events()), nil
 }
 
+// newCalendar builds the empty output calendar carrying the feed's identity.
+//
+// Besides the mandatory PRODID/VERSION it publishes the feed name (NAME per
+// RFC 7986 plus the widely implemented X-WR-CALNAME) so subscribers see a
+// named calendar instead of a URL, and — when the feed caches — the refresh
+// interval, so clients poll at the rate the cache actually refreshes instead
+// of guessing. A blank name sets neither property: no name beats an empty one,
+// which some clients render as a nameless calendar.
+func newCalendar(f *store.Feed) *ical.Calendar {
+	cal := ical.NewCalendar()
+	cal.Props.SetText(ical.PropProductID, "-//TidyDAV//EN")
+	cal.Props.SetText(ical.PropVersion, "2.0")
+
+	if name := strings.TrimSpace(f.Name); name != "" {
+		cal.Props.Set(ics.TextProp(ical.PropName, name))
+		cal.Props.Set(ics.TextProp("X-WR-CALNAME", name))
+	}
+	if f.TTLSeconds > 0 {
+		d := time.Duration(f.TTLSeconds) * time.Second
+		cal.Props.Set(ics.DurationProp(ical.PropRefreshInterval, d, true))
+		// X-PUBLISHED-TTL is the pre-RFC-7986 spelling Outlook and Google read;
+		// they expect it without a VALUE parameter.
+		cal.Props.Set(ics.DurationProp("X-PUBLISHED-TTL", d, false))
+	}
+	return cal
+}
+
 // merge fetches every source (tolerating individual failures via the proxy's
 // stale-on-error cache) and returns one calendar with their events, de-duplicated
 // by UID, plus the upstream VTIMEZONE definitions keyed by TZID (reattached at
 // render time for the TZIDs the final events actually reference).
 func (s *Service) merge(ctx context.Context, f *store.Feed) (*ical.Calendar, map[string]*ical.Component, error) {
 	ttl := time.Duration(f.TTLSeconds) * time.Second
-	merged := ical.NewCalendar()
-	merged.Props.SetText(ical.PropProductID, "-//TidyDAV//EN")
-	merged.Props.SetText(ical.PropVersion, "2.0")
+	merged := newCalendar(f)
 
 	seenUID := make(map[string]struct{})
 	uidSeq := make(map[string]int)

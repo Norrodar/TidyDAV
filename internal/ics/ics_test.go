@@ -3,6 +3,7 @@ package ics
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/emersion/go-ical"
 )
@@ -145,5 +146,59 @@ func TestSerializeRoundTrip(t *testing.T) {
 	}
 	if len(again.Events()) != 2 {
 		t.Errorf("round-trip event count = %d, want 2", len(again.Events()))
+	}
+}
+
+// go-ical refuses to encode a component-less VCALENDAR, so Serialize writes it
+// by hand. That path must still produce a parseable document whose already
+// escaped values are passed through untouched — and fold long lines.
+func TestSerializeEventlessCalendar(t *testing.T) {
+	const name = `a,b;c\d`
+	longName := strings.Repeat("Very long calendar name ", 6)
+
+	cal := ical.NewCalendar()
+	cal.Props.SetText(ical.PropProductID, "-//TidyDAV//EN")
+	cal.Props.SetText(ical.PropVersion, "2.0")
+	cal.Props.Set(TextProp("X-WR-CALNAME", name))
+	cal.Props.Set(TextProp("X-WR-CALDESC", longName))
+	cal.Props.Set(DurationProp(ical.PropRefreshInterval, 90*time.Minute, true))
+	cal.Props.Set(DurationProp("X-PUBLISHED-TTL", 90*time.Minute, false))
+
+	var sb strings.Builder
+	if err := Serialize(&sb, cal); err != nil {
+		t.Fatalf("Serialize: %v", err)
+	}
+	out := sb.String()
+
+	for _, want := range []string{
+		"BEGIN:VCALENDAR\r\n", "END:VCALENDAR\r\n",
+		"PRODID:-//TidyDAV//EN\r\n", "VERSION:2.0\r\n",
+		`X-WR-CALNAME:a\,b\;c\\d` + "\r\n",
+		"REFRESH-INTERVAL;VALUE=DURATION:PT1H30M\r\n",
+		"X-PUBLISHED-TTL:PT1H30M\r\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(out, "\r\n"), "\r\n") {
+		if len(line) > 75 {
+			t.Errorf("line not folded at 75 octets (%d): %q", len(line), line)
+		}
+	}
+
+	again, err := Parse(strings.NewReader(out))
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	got, err := again.Props.Text("X-WR-CALNAME")
+	if err != nil {
+		t.Fatalf("read X-WR-CALNAME: %v", err)
+	}
+	if got != name {
+		t.Errorf("X-WR-CALNAME round-trip = %q, want %q (double escaping?)", got, name)
+	}
+	if got, err := again.Props.Text("X-WR-CALDESC"); err != nil || got != longName {
+		t.Errorf("folded value round-trip = %q (err %v), want %q", got, err, longName)
 	}
 }

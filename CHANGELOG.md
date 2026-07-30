@@ -120,6 +120,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   link password protection), each with a one-sentence, plain-language explanation.
 - Calendar editor notifications grouped under "Trigger on" / "Notify via" headings with
   a generated plain-language summary of what will happen.
+- Served feeds carry their identity: the configured name goes out as `NAME` (RFC 7986)
+  and `X-WR-CALNAME`, RFC 5545 escaped, so a subscribed calendar shows its name instead
+  of a URL. A blank name emits neither property. Feeds with a cache TTL also publish
+  `REFRESH-INTERVAL;VALUE=DURATION` and `X-PUBLISHED-TTL`, so clients poll at the rate
+  the cache actually refreshes instead of guessing; without a TTL neither is sent. The
+  name and refresh interval survive even when every event is filtered away. The calendar
+  list shows a "checks every …" badge for cached feeds, and the editor explains both
+  fields.
 
 ### Changed
 

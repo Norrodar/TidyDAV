@@ -5,6 +5,7 @@
   import { toasts } from '$lib/state/toasts.svelte';
   import { confirmDialog } from '$lib/state/confirm.svelte';
   import { t, tf, lang } from '$lib/i18n';
+  import { refreshBadge } from '$lib/refresh';
 
   let feeds = $state<Feed[]>([]);
   let loading = $state(true);
@@ -173,6 +174,7 @@
           <div class="meta">
             <span class="badge">{tf('source_count', { n: feed.sources.length })}</span>
             <span class="badge">{tf('rule_count', { n: feed.rules.length })}</span>
+            {#if feed.ttlSeconds > 0}<span class="badge">{refreshBadge(feed.ttlSeconds)}</span>{/if}
             {#if feed.basicAuthEnabled}<span class="badge">{t('basic_auth_badge')}</span>{/if}
           </div>
           <div class="row-actions">

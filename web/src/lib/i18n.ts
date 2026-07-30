@@ -90,6 +90,8 @@ const en: Translations = {
   delete_calendar_confirm: 'Delete calendar “{name}”?',
   source_count: '{n} source(s)',
   rule_count: '{n} rule(s)',
+  refresh_badge_minutes: 'checks every {n} min',
+  refresh_badge_hours: 'checks every {n} h',
   basic_auth_badge: 'basic auth',
 
   // Calendar editor
@@ -97,6 +99,7 @@ const en: Translations = {
   new_calendar_heading: 'New calendar',
   name: 'Name',
   name_placeholder: 'Main Calendar',
+  name_hint: 'Your calendar app will show the subscribed calendar under this name.',
   create_calendar: 'Create calendar',
   calendar_saved: 'Calendar saved',
   calendar_created: 'Calendar created',
@@ -184,6 +187,8 @@ const en: Translations = {
   cache_title: 'Keep a cached copy',
   cache_desc:
     'TidyDAV remembers the last fetched calendar for a while, so it loads faster and still works if the source is briefly down.',
+  cache_refresh_hint:
+    'Calendar apps that support it are also asked to look for new entries about this often. Without a cached copy, every app decides for itself when to check.',
   basic_auth_title: 'Password-protect the link',
   basic_auth_desc:
     'Require a username and password to open your TidyDAV calendar link, so only you can use it.',
@@ -363,6 +368,8 @@ const de: Translations = {
   delete_calendar_confirm: 'Kalender „{name}" löschen?',
   source_count: '{n} Quelle(n)',
   rule_count: '{n} Regel(n)',
+  refresh_badge_minutes: 'prüft alle {n} Min.',
+  refresh_badge_hours: 'prüft alle {n} Std.',
   basic_auth_badge: 'Basic Auth',
 
   // Calendar editor
@@ -370,6 +377,7 @@ const de: Translations = {
   new_calendar_heading: 'Neuer Kalender',
   name: 'Name',
   name_placeholder: 'Hauptkalender',
+  name_hint: 'Unter diesem Namen zeigt deine Kalender-App den abonnierten Kalender an.',
   create_calendar: 'Kalender erstellen',
   calendar_saved: 'Kalender gespeichert',
   calendar_created: 'Kalender erstellt',
@@ -458,6 +466,8 @@ const de: Translations = {
   cache_title: 'Zwischenkopie behalten',
   cache_desc:
     'TidyDAV merkt sich den zuletzt geladenen Kalender eine Weile – dadurch lädt er schneller und funktioniert auch, wenn die Quelle kurz nicht erreichbar ist.',
+  cache_refresh_hint:
+    'Kalender-Apps, die das unterstützen, werden ausserdem gebeten, ungefähr in diesem Abstand nach neuen Einträgen zu schauen. Ohne Zwischenkopie entscheidet jede App selbst, wann sie nachsieht.',
   basic_auth_title: 'Link mit Passwort schützen',
   basic_auth_desc:
     'Verlangt Benutzername und Passwort zum Öffnen deines TidyDAV-Kalenderlinks, damit nur du ihn nutzen kannst.',
