@@ -9,12 +9,13 @@ import (
 )
 
 type notificationsDTO struct {
-	WebhookURL   string   `json:"webhookUrl,omitempty"`
-	NtfyServer   string   `json:"ntfyServer,omitempty"`
-	NtfyTopic    string   `json:"ntfyTopic,omitempty"`
-	GotifyServer string   `json:"gotifyServer,omitempty"`
-	GotifyToken  string   `json:"gotifyToken,omitempty"` // write-only
-	Triggers     []string `json:"triggers,omitempty"`
+	WebhookURL       string   `json:"webhookUrl,omitempty"`
+	NtfyServer       string   `json:"ntfyServer,omitempty"`
+	NtfyTopic        string   `json:"ntfyTopic,omitempty"`
+	GotifyServer     string   `json:"gotifyServer,omitempty"`
+	GotifyToken      string   `json:"gotifyToken,omitempty"` // write-only
+	Triggers         []string `json:"triggers,omitempty"`
+	SourceStaleHours int      `json:"sourceStaleHours,omitempty"`
 }
 
 type notificationsResponse struct {
@@ -24,6 +25,8 @@ type notificationsResponse struct {
 	GotifyServer   string   `json:"gotifyServer"`
 	GotifyTokenSet bool     `json:"gotifyTokenSet"`
 	Triggers       []string `json:"triggers"`
+	// Not omitempty: the editor must be able to read a 0 back as "off".
+	SourceStaleHours int `json:"sourceStaleHours"`
 }
 
 // buildNotifications produces the stored JSON from a request, preserving the
@@ -35,13 +38,18 @@ func buildNotifications(req *notificationsDTO, existing *store.Feed) (json.RawMe
 		}
 		return json.RawMessage("{}"), nil
 	}
+	staleHours := req.SourceStaleHours
+	if staleHours < 0 {
+		staleHours = 0 // a negative threshold would fire on every run
+	}
 	n := notify.FeedNotifications{
-		WebhookURL:   strings.TrimSpace(req.WebhookURL),
-		NtfyServer:   strings.TrimSpace(req.NtfyServer),
-		NtfyTopic:    strings.TrimSpace(req.NtfyTopic),
-		GotifyServer: strings.TrimSpace(req.GotifyServer),
-		GotifyToken:  req.GotifyToken,
-		Triggers:     req.Triggers,
+		WebhookURL:       strings.TrimSpace(req.WebhookURL),
+		NtfyServer:       strings.TrimSpace(req.NtfyServer),
+		NtfyTopic:        strings.TrimSpace(req.NtfyTopic),
+		GotifyServer:     strings.TrimSpace(req.GotifyServer),
+		GotifyToken:      req.GotifyToken,
+		Triggers:         req.Triggers,
+		SourceStaleHours: staleHours,
 	}
 	// The token is write-only, so an omitted one means "keep the stored token" —
 	// but only while the channel is still configured. Clearing the server (the
@@ -76,5 +84,7 @@ func toNotificationsResponse(raw json.RawMessage) notificationsResponse {
 		GotifyServer:   n.GotifyServer,
 		GotifyTokenSet: n.GotifyToken != "",
 		Triggers:       n.Triggers,
+
+		SourceStaleHours: n.SourceStaleHours,
 	}
 }

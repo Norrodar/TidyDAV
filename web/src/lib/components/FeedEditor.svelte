@@ -71,6 +71,10 @@
   let gotifyEnabled = $state(
     !!(initial?.notifications.gotifyServer || initial?.notifications.gotifyTokenSet)
   );
+  // Outage alert: a third trigger next to the rule triggers, but stored as a
+  // threshold rather than in the trigger list.
+  let staleEnabled = $state((initial?.notifications.sourceStaleHours ?? 0) > 0);
+  let staleHours = $state(initial?.notifications.sourceStaleHours || 48);
 
   let saving = $state(false);
   let previewing = $state(false);
@@ -261,6 +265,19 @@
       : [...notifyTriggers, type];
   }
 
+  // Common outage thresholds, in hours.
+  const stalePresets = [
+    { key: 'stale_preset_1d', hours: 24 },
+    { key: 'stale_preset_2d', hours: 48 },
+    { key: 'stale_preset_1w', hours: 168 }
+  ];
+
+  function toggleStale() {
+    staleEnabled = !staleEnabled;
+    // Never open the block on an empty field.
+    if (staleEnabled && !(staleHours > 0)) staleHours = 48;
+  }
+
   // Field chip / custom helpers operate on the stored fields/keyFields arrays.
   function hasField(arr: string[] | undefined, f: string): boolean {
     return (arr ?? []).some((x) => x.toUpperCase() === f.toUpperCase());
@@ -316,7 +333,10 @@
         gotifyServer: gotifyEnabled ? notifyGotifyServer || undefined : '',
         // Sent empty when the channel is off so the stored token is dropped.
         gotifyToken: gotifyEnabled ? notifyGotifyToken || undefined : '',
-        triggers: notifyTriggers
+        triggers: notifyTriggers,
+        // Always sent explicitly: omitting it would leave a previously stored
+        // threshold in place when the trigger is switched off.
+        sourceStaleHours: staleEnabled ? Math.max(1, Math.round(staleHours)) : 0
       }
     };
   }
@@ -363,6 +383,10 @@
     }
     if (authEnabled && !basicAuthUser.trim()) {
       error = t('err_auth_user_required');
+      return;
+    }
+    if (staleEnabled && !(staleHours >= 1)) {
+      error = t('err_stale_hours_required');
       return;
     }
     saving = true;
@@ -467,14 +491,34 @@
   const notifyTriggerLabels = $derived(
     notifyTriggers.map((x) => (x === 'rename' ? t('rule_rename') : t('rule_filter')))
   );
-  const notifySummary = $derived(
-    notifyTriggerLabels.length && notifyChannelLabels.length
-      ? tf('notify_summary', {
+  // One sentence per active trigger kind. "Nothing configured yet" may only
+  // appear when neither of them would fire, otherwise the summary contradicts
+  // what the calendar actually does.
+  const notifySummaryLines = $derived.by(() => {
+    const channels = notifyChannelLabels.join(` ${t('notify_and')} `);
+    const lines: string[] = [];
+    if (notifyTriggerLabels.length && notifyChannelLabels.length) {
+      lines.push(
+        tf('notify_summary', {
           triggers: notifyTriggerLabels.join(` ${t('notify_and')} `),
-          channels: notifyChannelLabels.join(` ${t('notify_and')} `)
+          channels
         })
-      : t('notify_summary_none')
-  );
+      );
+    }
+    if (staleEnabled && notifyChannelLabels.length) {
+      lines.push(
+        tf('notify_summary_stale', { hours: Math.max(1, Math.round(staleHours)), channels })
+      );
+    }
+    if (lines.length) return lines;
+    // With the outage alert armed but no channel yet, the warning below says
+    // what is missing — claiming "nothing configured" on top of it would
+    // contradict the trigger the user just switched on.
+    return staleEnabled ? [] : [t('notify_summary_none')];
+  });
+  // Armed but undeliverable: a warning, not a blocker — setting up a channel is
+  // usually the user's next step.
+  const staleNeedsChannel = $derived(staleEnabled && notifyChannelLabels.length === 0);
 </script>
 
 <div class="editor-layout">
@@ -852,6 +896,9 @@
               class:on={notifyTriggers.includes('rename')}
               onclick={() => toggleTrigger('rename')}>{t('rule_rename')}</button
             >
+            <button type="button" class="chip" class:on={staleEnabled} onclick={toggleStale}
+              >{t('trigger_source_stale')}</button
+            >
           </div>
         </div>
         <div class="notify-col">
@@ -878,6 +925,27 @@
           </div>
         </div>
       </div>
+
+      {#if staleEnabled}
+        <div class="stale">
+          <div class="chips-label">{t('stale_after')}</div>
+          <div class="chips">
+            {#each stalePresets as preset (preset.hours)}
+              <button
+                type="button"
+                class="chip"
+                class:on={staleHours === preset.hours}
+                onclick={() => (staleHours = preset.hours)}>{t(preset.key)}</button
+              >
+            {/each}
+          </div>
+          <label class="inline">
+            <input class="input narrow" type="number" min="1" bind:value={staleHours} />
+            {t('stale_unit')}
+          </label>
+          <p class="opt-desc">{t('stale_desc')}</p>
+        </div>
+      {/if}
 
       {#if webhookEnabled}
         <div class="row wrap">
@@ -948,7 +1016,12 @@
         </div>
       {/if}
 
-      <p class="notify-summary">{notifySummary}</p>
+      {#each notifySummaryLines as line (line)}
+        <p class="notify-summary">{line}</p>
+      {/each}
+      {#if staleNeedsChannel}
+        <p class="notify-summary warn">{t('notify_stale_no_channel')}</p>
+      {/if}
     </section>
 
     {#if error}<p class="error">{error}</p>{/if}
@@ -1385,6 +1458,18 @@
     border-left: 2px solid var(--accent);
     color: var(--text-secondary);
     font-size: var(--text-sm);
+  }
+  .notify-summary.warn {
+    border-left-color: var(--warning);
+  }
+  .stale {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  /* .opt-desc is indented to clear a checkbox; there is none here. */
+  .stale .opt-desc {
+    margin-left: 0;
   }
   .error {
     color: var(--danger);

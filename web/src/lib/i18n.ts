@@ -153,6 +153,8 @@ const en: Translations = {
   err_days_required: 'the number of days must be greater than 0.',
   err_lead_required: 'the lead time must be 0 or more.',
   err_auth_user_required: 'Password protection needs a username as well as a password.',
+  err_stale_hours_required:
+    'Please enter after how many hours TidyDAV should warn you about a silent source.',
   help_filter: 'Keep or drop events whose chosen fields match the pattern.',
   help_dedup: 'Remove duplicate events sharing the same key fields (default: summary + date).',
   help_rename: 'Rewrite a text field by replacing matches ($1 references a regex group).',
@@ -205,6 +207,19 @@ const en: Translations = {
   notify_and: 'and',
   notify_summary: 'On {triggers}, you are notified via {channels}.',
   notify_summary_none: 'No notifications configured yet.',
+  trigger_source_stale: 'Source stops updating',
+  stale_after: 'Warn me after',
+  stale_unit: 'hours without a successful update',
+  stale_preset_1d: '1 day',
+  stale_preset_2d: '2 days',
+  stale_preset_1w: '1 week',
+  stale_desc:
+    'When a source goes quiet, TidyDAV keeps serving the last copy it got — so a dead link stays invisible and your calendar silently shows last year’s dates. This sends you one warning once nothing has arrived for that long, and one all-clear as soon as the source works again. TidyDAV checks on its notification schedule (TIDYDAV_NOTIFY_INTERVAL, 15 minutes by default), so the warning can be up to one interval late.',
+  notify_summary_stale:
+    'If a source has not delivered anything for {hours} hours, you are notified via {channels} — and once more when it works again.',
+  notify_stale_no_channel:
+    'Pick at least one way to reach you above, otherwise the outage warning cannot be delivered.',
+  stale_badge: 'Outage alert',
   enable_webhook: 'Webhook',
   enable_ntfy: 'ntfy',
   enable_gotify: 'Gotify',
@@ -432,6 +447,8 @@ const de: Translations = {
   err_days_required: 'die Anzahl Tage muss größer als 0 sein.',
   err_lead_required: 'die Vorlaufzeit muss 0 oder größer sein.',
   err_auth_user_required: 'Passwortschutz braucht neben dem Passwort auch einen Benutzernamen.',
+  err_stale_hours_required:
+    'Bitte angeben, nach wie vielen Stunden TidyDAV vor einer stummen Quelle warnen soll.',
   help_filter: 'Events behalten oder verwerfen, deren gewählte Felder zum Muster passen.',
   help_dedup: 'Doppelte Events mit gleichen Schlüsselfeldern entfernen (Standard: Titel + Datum).',
   help_rename: 'Ein Textfeld umschreiben, indem Treffer ersetzt werden ($1 = Regex-Gruppe).',
@@ -484,6 +501,19 @@ const de: Translations = {
   notify_and: 'und',
   notify_summary: 'Beim {triggers} wird über {channels} benachrichtigt.',
   notify_summary_none: 'Noch keine Benachrichtigung konfiguriert.',
+  trigger_source_stale: 'Quelle liefert nichts mehr',
+  stale_after: 'Warnen nach',
+  stale_unit: 'Stunden ohne erfolgreichen Abruf',
+  stale_preset_1d: '1 Tag',
+  stale_preset_2d: '2 Tage',
+  stale_preset_1w: '1 Woche',
+  stale_desc:
+    'Wenn eine Quelle ausfällt, liefert TidyDAV weiter die letzte Kopie aus — ein toter Link bleibt dadurch unsichtbar und im Kalender stehen still und leise die Termine von letztem Jahr. Hier bekommst du eine Warnung, sobald so lange nichts mehr angekommen ist, und eine Entwarnung, sobald die Quelle wieder liefert. Geprüft wird im Takt der Benachrichtigungen (TIDYDAV_NOTIFY_INTERVAL, standardmäßig 15 Minuten) — die Warnung kann also bis zu einen Takt später eintreffen.',
+  notify_summary_stale:
+    'Liefert eine Quelle {hours} Stunden lang nichts mehr, wirst du über {channels} benachrichtigt — und noch einmal, sobald sie wieder läuft.',
+  notify_stale_no_channel:
+    'Wähle oben mindestens einen Weg aus, sonst kann die Ausfallwarnung nicht zugestellt werden.',
+  stale_badge: 'Ausfallwarnung',
   enable_webhook: 'Webhook',
   enable_ntfy: 'ntfy',
   enable_gotify: 'Gotify',
@@ -560,17 +590,18 @@ const de: Translations = {
   result: 'Ergebnis'
 };
 
-const map: Record<string, Translations> = { en, de };
+/** All translation tables, exported so tests can check them for parity. */
+export const dictionaries: Record<string, Translations> = { en, de };
 
 function detectLang(): string {
   if (typeof navigator === 'undefined') return 'en';
   const l = navigator.language ?? 'en';
   const prefix = l.split('-')[0].toLowerCase();
-  return prefix in map ? prefix : 'en';
+  return prefix in dictionaries ? prefix : 'en';
 }
 
 export const lang = detectLang();
-const dict = map[lang] ?? en;
+const dict = dictionaries[lang] ?? en;
 
 export function t(key: string): string {
   return dict[key] ?? en[key] ?? key;

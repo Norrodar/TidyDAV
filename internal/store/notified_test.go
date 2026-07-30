@@ -60,3 +60,28 @@ func TestAllFeeds(t *testing.T) {
 		t.Fatalf("AllFeeds len = %d, want 2", len(all))
 	}
 }
+
+func TestIsNotified(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+
+	// A plain read must not create the entry it asks about.
+	if ok, err := st.IsNotified(ctx, "feed1", "key1"); err != nil || ok {
+		t.Fatalf("IsNotified on empty ledger = %v, %v; want false, nil", ok, err)
+	}
+	if first, _ := st.MarkNotified(ctx, "feed1", "key1"); !first {
+		t.Error("IsNotified must not have inserted the key")
+	}
+	if ok, _ := st.IsNotified(ctx, "feed1", "key1"); !ok {
+		t.Error("marked key should read back as notified")
+	}
+	if ok, _ := st.IsNotified(ctx, "feed2", "key1"); ok {
+		t.Error("the ledger must be scoped per feed")
+	}
+	if err := st.UnmarkNotified(ctx, "feed1", "key1"); err != nil {
+		t.Fatalf("UnmarkNotified: %v", err)
+	}
+	if ok, _ := st.IsNotified(ctx, "feed1", "key1"); ok {
+		t.Error("unmarked key should read back as not notified")
+	}
+}

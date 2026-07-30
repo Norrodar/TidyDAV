@@ -1,11 +1,14 @@
 package e2e
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/Norrodar/TidyDAV/internal/notifier"
 )
 
 type previewResult struct {
@@ -345,4 +348,56 @@ func TestSessionLifecycle(t *testing.T) {
 	other.post("/auth/login", map[string]string{
 		"email": "session@example.com", "password": "wrong",
 	}).expect(http.StatusUnauthorized)
+}
+
+// A source that stops delivering is announced once, and its recovery once —
+// otherwise the proxy keeps serving the last good copy and the outage stays
+// invisible.
+func TestSourceOutageAlertAndRecovery(t *testing.T) {
+	var messages atomic.Int32
+	alerts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		messages.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer alerts.Close()
+
+	up := newUpstream(t, calendar(vevent("o@up", "Bin day", "20260615T090000Z")))
+	in := newInstance(t)
+	c := in.newClient()
+	c.register("outage@example.com")
+
+	// The calendar arms the outage alert only — no rule triggers at all.
+	feed := c.createFeed(map[string]any{
+		"name": "Waste", "sources": []map[string]any{{"url": up.URL}}, "rules": []map[string]any{},
+		"notifications": map[string]any{"webhookUrl": alerts.URL, "sourceStaleHours": 1},
+	})
+
+	n := notifier.New(in.app.Store, in.app.Feed, in.app.Log, true)
+	ctx := context.Background()
+
+	// Nothing has ever been fetched: that is an outage, announced exactly once.
+	for i := 0; i < 2; i++ {
+		if err := n.Run(ctx); err != nil {
+			t.Fatalf("notifier run %d: %v", i+1, err)
+		}
+	}
+	if got := messages.Load(); got != 1 {
+		t.Fatalf("outage messages = %d, want 1", got)
+	}
+
+	// A calendar client fetching the ICS link refreshes the source.
+	in.anonymous().get(icsPath(t, feed.ICSURL)).expect(http.StatusOK)
+
+	if err := n.Run(ctx); err != nil {
+		t.Fatalf("notifier run after recovery: %v", err)
+	}
+	if got := messages.Load(); got != 2 {
+		t.Fatalf("messages after recovery = %d, want 2 (outage + all-clear)", got)
+	}
+	if err := n.Run(ctx); err != nil {
+		t.Fatalf("notifier run after all-clear: %v", err)
+	}
+	if got := messages.Load(); got != 2 {
+		t.Errorf("messages after a healthy run = %d, want 2 (no repeats)", got)
+	}
 }

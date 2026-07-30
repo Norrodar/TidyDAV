@@ -75,6 +75,12 @@ func redactURL(raw string) string {
 	return u.Redacted()
 }
 
+// RedactURL returns raw without its query string (e.g. a Gotify ?token=) and
+// with any userinfo password masked. Callers that put a user-supplied URL into
+// a notification body must run it through this first: the message is delivered
+// to third-party servers (ntfy.sh, Gotify) and must never carry credentials.
+func RedactURL(raw string) string { return redactURL(raw) }
+
 // redactError removes the raw URL from an error's message. Go's transport
 // errors embed the request URL verbatim, which leaks the Gotify token.
 func redactError(err error, raw string) error {
@@ -236,13 +242,16 @@ func NewFromConfig(cfg Config, log *slog.Logger, allowPrivate bool) *Dispatcher 
 
 // FeedNotifications is the per-feed notification configuration (stored as JSON on
 // the feed). Triggers names the rule types whose matches fire notifications.
+// SourceStaleHours arms the outage alert: after that many hours without a
+// successful upstream fetch the source is reported as dead (0 = off).
 type FeedNotifications struct {
-	WebhookURL   string   `json:"webhookUrl,omitempty"`
-	NtfyServer   string   `json:"ntfyServer,omitempty"`
-	NtfyTopic    string   `json:"ntfyTopic,omitempty"`
-	GotifyServer string   `json:"gotifyServer,omitempty"`
-	GotifyToken  string   `json:"gotifyToken,omitempty"`
-	Triggers     []string `json:"triggers,omitempty"`
+	WebhookURL       string   `json:"webhookUrl,omitempty"`
+	NtfyServer       string   `json:"ntfyServer,omitempty"`
+	NtfyTopic        string   `json:"ntfyTopic,omitempty"`
+	GotifyServer     string   `json:"gotifyServer,omitempty"`
+	GotifyToken      string   `json:"gotifyToken,omitempty"`
+	Triggers         []string `json:"triggers,omitempty"`
+	SourceStaleHours int      `json:"sourceStaleHours,omitempty"`
 }
 
 func (f FeedNotifications) config() Config {
@@ -262,9 +271,17 @@ func (f FeedNotifications) HasTarget() bool {
 		(f.GotifyServer != "" && f.GotifyToken != "")
 }
 
-// Enabled reports whether notifications should fire (a target and a trigger).
+// Enabled reports whether rule-match notifications should fire (a target and a
+// trigger). It deliberately ignores the outage alert, which is an independent
+// trigger with its own predicate.
 func (f FeedNotifications) Enabled() bool {
 	return f.HasTarget() && len(f.Triggers) > 0
+}
+
+// StaleEnabled reports whether the outage alert should fire (a target and a
+// configured threshold).
+func (f FeedNotifications) StaleEnabled() bool {
+	return f.HasTarget() && f.SourceStaleHours > 0
 }
 
 // Triggered reports whether ruleType is configured to fire notifications.

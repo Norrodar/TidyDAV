@@ -147,3 +147,61 @@ func TestErrorDoesNotLeakToken(t *testing.T) {
 		t.Errorf("error leaked the gotify token: %v", err)
 	}
 }
+
+// A feed stored before the outage alert existed must decode to "off" and keep
+// behaving exactly as before.
+func TestFeedNotificationsLegacyJSON(t *testing.T) {
+	const stored = `{"webhookUrl":"https://hook.example.com/x","ntfyServer":"https://ntfy.sh","ntfyTopic":"waste","triggers":["filter","rename"]}`
+
+	var cfg FeedNotifications
+	if err := json.Unmarshal([]byte(stored), &cfg); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if cfg.SourceStaleHours != 0 {
+		t.Errorf("SourceStaleHours = %d, want 0 for a config without the field", cfg.SourceStaleHours)
+	}
+	if !cfg.HasTarget() || !cfg.Enabled() {
+		t.Error("existing behaviour changed: HasTarget/Enabled must still be true")
+	}
+	if cfg.StaleEnabled() {
+		t.Error("outage alert must stay off when the threshold is absent")
+	}
+	if !cfg.Triggered("filter") || cfg.Triggered("dedup") {
+		t.Error("triggers decoded incorrectly")
+	}
+}
+
+func TestStaleEnabled(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  FeedNotifications
+		want bool
+	}{
+		{"threshold without target", FeedNotifications{SourceStaleHours: 24}, false},
+		{"target without threshold", FeedNotifications{WebhookURL: "https://hook"}, false},
+		{"negative threshold", FeedNotifications{WebhookURL: "https://hook", SourceStaleHours: -1}, false},
+		{"both", FeedNotifications{WebhookURL: "https://hook", SourceStaleHours: 1}, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.cfg.StaleEnabled(); got != tc.want {
+				t.Errorf("StaleEnabled() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRedactURL(t *testing.T) {
+	got := RedactURL("https://user:hunter2@cal.example.org/waste.ics?token=supersecrettoken")
+	for _, secret := range []string{"hunter2", "supersecrettoken"} {
+		if strings.Contains(got, secret) {
+			t.Errorf("RedactURL leaked %q: %s", secret, got)
+		}
+	}
+	if !strings.Contains(got, "cal.example.org/waste.ics") {
+		t.Errorf("RedactURL dropped the identifying part: %s", got)
+	}
+	if got := RedactURL("://not a url"); strings.Contains(got, "not a url") {
+		t.Errorf("unparsable URL should be fully redacted, got %q", got)
+	}
+}

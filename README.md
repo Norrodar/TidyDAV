@@ -46,6 +46,10 @@ jobs:
 ### Notifications & audit
 - Fire **webhook / ntfy / Gotify** notifications the first time a feed rule matches an
   event — evaluated on a schedule, de-duplicated, never on calendar polls (no spam).
+- **Outage alert:** get one warning when a source stops delivering (and one all-clear
+  when it recovers), so a dead upstream URL doesn't hide behind the cached last good
+  copy. Checked on the notifier schedule (`TIDYDAV_NOTIFY_INTERVAL`, 15 min by default),
+  which is also how late a warning can be.
 - Admin-only **audit log** of feed and sync-job changes.
 
 ### Authentication

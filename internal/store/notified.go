@@ -40,6 +40,20 @@ func (s *Store) MarkNotified(ctx context.Context, feedID, key string) (bool, err
 	return n > 0, nil
 }
 
+// IsNotified reports whether (feedID, key) is currently recorded in the ledger,
+// without creating it. Callers that only want to know the previous state — e.g.
+// "was an outage announced for this source?" — must use this instead of
+// MarkNotified, which would insert the very entry it is asked about.
+func (s *Store) IsNotified(ctx context.Context, feedID, key string) (bool, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM notified WHERE feed_id = ? AND event_key = ?)`, feedID, key)
+	var exists bool
+	if err := row.Scan(&exists); err != nil {
+		return false, fmt.Errorf("query notified: %w", err)
+	}
+	return exists, nil
+}
+
 // UnmarkNotified removes a ledger entry again, so a notification that could not
 // be delivered to any target is retried on the next run instead of being lost.
 func (s *Store) UnmarkNotified(ctx context.Context, feedID, key string) error {

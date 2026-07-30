@@ -114,6 +114,8 @@ export interface NotificationsInput {
   gotifyServer?: string;
   gotifyToken?: string; // write-only
   triggers?: string[];
+  /** Warn after this many hours without a successful source fetch; 0 = off. */
+  sourceStaleHours?: number;
 }
 
 export interface NotificationsResponse {
@@ -123,6 +125,7 @@ export interface NotificationsResponse {
   gotifyServer: string;
   gotifyTokenSet: boolean;
   triggers: string[] | null; // the API omits an empty list
+  sourceStaleHours: number;
 }
 
 export interface Feed {

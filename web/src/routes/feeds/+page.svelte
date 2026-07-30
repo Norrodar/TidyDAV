@@ -62,24 +62,32 @@
     return isNaN(d.getTime()) ? iso : d.toLocaleString(lang);
   }
 
-  // Source health: ok (fetched within 24h), stale (older) or never fetched.
+  // Source health: ok (fetched within the threshold), stale (older) or never
+  // fetched. The threshold follows the calendar's outage alert so the dot turns
+  // yellow at exactly the point a notification would go out; calendars without
+  // the alert keep the previous 24h default.
+  const DEFAULT_STALE_HOURS = 24;
   type Health = 'ok' | 'stale' | 'never';
-  function sourceHealth(lastFetchedAt?: string): Health {
+  function staleHours(feed: Feed): number {
+    return feed.notifications?.sourceStaleHours || DEFAULT_STALE_HOURS;
+  }
+  function sourceHealth(lastFetchedAt: string | undefined, thresholdHours: number): Health {
     if (!lastFetchedAt) return 'never';
     const d = new Date(lastFetchedAt);
     if (isNaN(d.getTime())) return 'never';
-    return Date.now() - d.getTime() > 24 * 3600 * 1000 ? 'stale' : 'ok';
+    return Date.now() - d.getTime() > thresholdHours * 3600 * 1000 ? 'stale' : 'ok';
   }
-  function healthTitle(lastFetchedAt?: string): string {
-    const h = sourceHealth(lastFetchedAt);
+  function healthTitle(lastFetchedAt: string | undefined, thresholdHours: number): string {
+    const h = sourceHealth(lastFetchedAt, thresholdHours);
     if (h === 'never') return t('health_never');
     const time = fmtDateTime(lastFetchedAt!);
     return h === 'ok' ? tf('health_ok', { time }) : tf('health_stale', { time });
   }
   function worstHealth(feed: Feed): Health {
+    const threshold = staleHours(feed);
     let worst: Health = 'ok';
     for (const s of feed.sources) {
-      const h = sourceHealth(s.lastFetchedAt);
+      const h = sourceHealth(s.lastFetchedAt, threshold);
       if (h === 'stale') return 'stale';
       if (h === 'never') worst = 'never';
     }
@@ -154,7 +162,9 @@
             <h2>
               <span
                 class="health {worstHealth(feed)}"
-                title={feed.sources.map((s) => healthTitle(s.lastFetchedAt)).join('\n')}
+                title={feed.sources
+                  .map((s) => healthTitle(s.lastFetchedAt, staleHours(feed)))
+                  .join('\n')}
               ></span>
               {feed.name}
             </h2>
@@ -176,6 +186,9 @@
             <span class="badge">{tf('rule_count', { n: feed.rules.length })}</span>
             {#if feed.ttlSeconds > 0}<span class="badge">{refreshBadge(feed.ttlSeconds)}</span>{/if}
             {#if feed.basicAuthEnabled}<span class="badge">{t('basic_auth_badge')}</span>{/if}
+            {#if (feed.notifications?.sourceStaleHours ?? 0) > 0}
+              <span class="badge">{t('stale_badge')}</span>
+            {/if}
           </div>
           <div class="row-actions">
             <button class="button button-secondary" onclick={() => togglePreview(feed)}>

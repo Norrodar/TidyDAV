@@ -128,6 +128,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   name and refresh interval survive even when every event is filtered away. The calendar
   list shows a "checks every …" badge for cached feeds, and the editor explains both
   fields.
+- Alert when a calendar source stops updating, plus an all-clear once it recovers.
+  Because the proxy keeps serving the last good copy on every upstream error, a dead
+  source was previously invisible — the calendar silently kept showing last year's
+  dates. A per-calendar threshold ("warn after N hours without a successful fetch",
+  a third trigger next to filter and rename) sends exactly one warning over the
+  configured channels and exactly one all-clear when the source works again; an
+  undeliverable message is retried on the next run. Source URLs are redacted before
+  sending, and the de-duplication ledger stores a hash instead of the URL, so no
+  token or password reaches a notification target or the database in clear text.
+  Checks run on the notifier schedule (`TIDYDAV_NOTIFY_INTERVAL`, 15 minutes by
+  default), which bounds how quickly the warning can arrive. The health dot in the
+  calendar list now uses the same threshold instead of a fixed 24 hours.
 
 ### Changed
 

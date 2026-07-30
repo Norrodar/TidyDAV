@@ -413,3 +413,61 @@ func TestFeedNotifications(t *testing.T) {
 		t.Errorf("token not preserved on update: %s", rec.Body.String())
 	}
 }
+
+func TestFeedNotificationsSourceStaleHours(t *testing.T) {
+	srv := newTestServer(t)
+	cookies := register(t, srv, "stale@example.com")
+
+	type notif struct {
+		SourceStaleHours int `json:"sourceStaleHours"`
+	}
+	var created struct {
+		ID            string `json:"id"`
+		Notifications notif  `json:"notifications"`
+	}
+
+	body := `{"name":"S","sources":[],"notifications":{"webhookUrl":"https://hook","sourceStaleHours":48}}`
+	rec := do(t, srv, http.MethodPost, "/api/feeds", body, cookies)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created.Notifications.SourceStaleHours != 48 {
+		t.Fatalf("sourceStaleHours = %d, want 48: %s", created.Notifications.SourceStaleHours, rec.Body.String())
+	}
+
+	// Read back through the list endpoint, the way the editor loads a feed.
+	rec = do(t, srv, http.MethodGet, "/api/feeds/"+created.ID, "", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode get: %v", err)
+	}
+	if created.Notifications.SourceStaleHours != 48 {
+		t.Errorf("sourceStaleHours after reload = %d, want 48", created.Notifications.SourceStaleHours)
+	}
+
+	// Switching the alert off must clear it, and a 0 must be reported explicitly
+	// so the editor can tell "off" from "unset".
+	upd := `{"name":"S","sources":[],"notifications":{"webhookUrl":"https://hook","sourceStaleHours":0}}`
+	rec = do(t, srv, http.MethodPut, "/api/feeds/"+created.ID, upd, cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"sourceStaleHours":0`) {
+		t.Errorf("disabled alert not reported as 0: %s", rec.Body.String())
+	}
+
+	// A negative threshold would fire on every run; it is clamped to "off".
+	neg := `{"name":"S","sources":[],"notifications":{"webhookUrl":"https://hook","sourceStaleHours":-5}}`
+	rec = do(t, srv, http.MethodPut, "/api/feeds/"+created.ID, neg, cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"sourceStaleHours":0`) {
+		t.Errorf("negative threshold not clamped: %s", rec.Body.String())
+	}
+}
