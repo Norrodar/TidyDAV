@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   backend:
-    name: Go (vet, test, build)
+    name: Go (lint, test, build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,13 +19,116 @@ jobs:
         with:
           go-version: "1.25"
           cache: true
+
+      # Formatting is part of the contract, so an unformatted file fails here
+      # rather than turning up as noise in the next diff.
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l ./cmd ./internal)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'ed:"
+            echo "$unformatted"
+            gofmt -d ./cmd ./internal
+            exit 1
+          fi
+
       # node_modules is absent in this job, so ./... stays clean.
       - run: go vet ./...
-      - run: go test ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+
+      # -race catches data races in the scheduler, sync runner and notifier that
+      # a plain run would happily hide.
+      - name: Unit tests (race detector)
+        run: go test -race -timeout 10m ./...
+
       - run: CGO_ENABLED=0 go build ./cmd/tidydav
 
+  e2e:
+    name: End-to-end regression suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      # These boot a fully wired instance and drive it over HTTP: calendar
+      # lifecycle, the rule pipeline, ICS delivery, previews, notifications,
+      # ownership isolation and the cache/credential separation. If a change
+      # breaks something a user relies on, this is what catches it.
+      - name: Feature regression tests
+        run: go test -race -timeout 10m -v ./internal/e2e/
+
+      - name: Coverage summary
+        run: |
+          go test -coverprofile=coverage.out -covermode=atomic ./internal/... > /dev/null
+          echo "### Test coverage" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          go tool cover -func=coverage.out | tail -n 1 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    name: Binary smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      # Build exactly what ships — frontend embedded into the binary — and
+      # prove it boots, migrates a fresh database and answers requests. Catches
+      # embed/migration/wiring breakage that unit tests cannot see.
+      - name: Build the real artifact
+        run: |
+          npm --prefix web ci
+          npm --prefix web run build
+          CGO_ENABLED=0 go build -o tidydav ./cmd/tidydav
+
+      - name: Boot and probe
+        env:
+          TIDYDAV_SECRET_KEY: smoke-test-key
+          TIDYDAV_BASE_URL: http://localhost:8080
+          TIDYDAV_DB_PATH: ./smoke.db
+        run: |
+          ./tidydav &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/health > /dev/null 2>&1; then break; fi
+            if ! kill -0 $pid 2>/dev/null; then echo "server exited during start-up"; exit 1; fi
+            sleep 1
+          done
+
+          echo "--- /health"
+          curl -fsS http://localhost:8080/health | tee /dev/stderr | grep -q '"status":"ok"'
+
+          echo "--- SPA is served from the embedded assets"
+          curl -fsS http://localhost:8080/ | grep -qi '<!doctype html'
+
+          echo "--- the API rejects anonymous access"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/feeds)" = "401"
+
+          echo "--- a fresh database was migrated"
+          test -s ./smoke.db
+
+          echo "--- the built-in healthcheck used by Docker works"
+          ./tidydav -healthcheck
+
   frontend:
-    name: Frontend (check, build, test)
+    name: Frontend (lint, check, test, build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -38,14 +141,15 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      - run: npm run lint
       - run: npm run check
-      - run: npm run build
       - run: npm test
+      - run: npm run build
 
   docker:
     name: Docker image
     runs-on: ubuntu-latest
-    needs: [backend, frontend]
+    needs: [backend, e2e, smoke, frontend]
     permissions:
       contents: read
       packages: write
