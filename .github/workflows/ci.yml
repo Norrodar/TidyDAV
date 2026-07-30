@@ -41,8 +41,11 @@ jobs:
           version: v1.64.8
 
       # -race catches data races in the scheduler, sync runner and notifier that
-      # a plain run would happily hide.
+      # a plain run would happily hide. It needs cgo for the test build only —
+      # the shipped binary is still built with CGO_ENABLED=0 below.
       - name: Unit tests (race detector)
+        env:
+          CGO_ENABLED: "1"
         run: go test -race -timeout 10m ./...
 
       - run: CGO_ENABLED=0 go build ./cmd/tidydav
@@ -62,6 +65,8 @@ jobs:
       # ownership isolation and the cache/credential separation. If a change
       # breaks something a user relies on, this is what catches it.
       - name: Feature regression tests
+        env:
+          CGO_ENABLED: "1" # required by -race; does not affect the release build
         run: go test -race -timeout 10m -v ./internal/e2e/
 
       - name: Coverage summary
