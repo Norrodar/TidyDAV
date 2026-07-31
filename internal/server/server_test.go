@@ -11,11 +11,12 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/Norrodar/TidyDAV/internal/app"
 	"github.com/Norrodar/TidyDAV/internal/config"
 	"github.com/Norrodar/TidyDAV/internal/server"
 	"github.com/Norrodar/TidyDAV/internal/store"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func newTestServer(t *testing.T) *server.Server {

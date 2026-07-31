@@ -19,7 +19,7 @@ var sampleEvent = Event{Feed: "Müll", Rule: "filter", Summary: "Schwarze Tonne"
 
 func TestWebhookNotify(t *testing.T) {
 	var got Event
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 			t.Errorf("content-type = %q", ct)
 		}
@@ -39,7 +39,7 @@ func TestNtfyNotify(t *testing.T) {
 	var (
 		path, titleHdr, body string
 	)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		path = r.URL.Path
 		titleHdr = r.Header.Get("Title")
 		b, _ := io.ReadAll(r.Body)
@@ -66,7 +66,7 @@ func TestGotifyNotify(t *testing.T) {
 		path, token string
 		payload     map[string]string
 	)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		path = r.URL.Path
 		token = r.URL.Query().Get("token")
 		_ = json.NewDecoder(r.Body).Decode(&payload)
@@ -96,7 +96,7 @@ func TestNotifyNon2xx(t *testing.T) {
 
 func TestDispatcherToleratesFailure(t *testing.T) {
 	var goodHits int32
-	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	good := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&goodHits, 1)
 	}))
 	defer good.Close()

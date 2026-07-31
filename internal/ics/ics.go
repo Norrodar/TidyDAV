@@ -123,16 +123,16 @@ func contentLine(prop *ical.Prop) (string, error) {
 // counts towards the limit) and never split a multi-octet UTF-8 sequence.
 func foldLine(buf *bytes.Buffer, line string) {
 	const limit = 75
-	max := limit
-	for len(line) > max {
-		cut := max
+	room := limit
+	for len(line) > room {
+		cut := room
 		for cut > 1 && !utf8.RuneStart(line[cut]) {
 			cut--
 		}
 		buf.WriteString(line[:cut])
 		buf.WriteString("\r\n ")
 		line = line[cut:]
-		max = limit - 1 // the leading space of the continuation line
+		room = limit - 1 // the leading space of the continuation line
 	}
 	buf.WriteString(line)
 	buf.WriteString("\r\n")

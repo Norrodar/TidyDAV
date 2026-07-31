@@ -13,11 +13,12 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/oauth2"
+
 	"github.com/Norrodar/TidyDAV/internal/auth"
 	"github.com/Norrodar/TidyDAV/internal/config"
 	"github.com/Norrodar/TidyDAV/internal/store"
-	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/oauth2"
 )
 
 const (

@@ -35,10 +35,12 @@ jobs:
       # node_modules is absent in this job, so ./... stays clean.
       - run: go vet ./...
 
+      # v2 is required: the v1 line was built against an older Go and cannot
+      # type-check a go1.25 module, which failed this job on every commit.
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: v1.64.8
+          version: v2.12.2
 
       # -race catches data races in the scheduler, sync runner and notifier that
       # a plain run would happily hide. It needs cgo for the test build only —

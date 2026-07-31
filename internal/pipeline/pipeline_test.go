@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Norrodar/TidyDAV/internal/ics"
 	"github.com/emersion/go-ical"
+
+	"github.com/Norrodar/TidyDAV/internal/ics"
 )
 
 func TestPipelineSequential(t *testing.T) {

@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Norrodar/TidyDAV/internal/ics"
 	"github.com/emersion/go-vcard"
+
+	"github.com/Norrodar/TidyDAV/internal/ics"
 )
 
 // CalendarUID returns the UID of the first component that has one (VEVENT/VTODO)

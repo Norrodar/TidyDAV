@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Norrodar/TidyDAV/internal/ics"
 	"github.com/emersion/go-ical"
+
+	"github.com/Norrodar/TidyDAV/internal/ics"
 )
 
 // mustCal builds a calendar from VEVENT blocks (see event()).

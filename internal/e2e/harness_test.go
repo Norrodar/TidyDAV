@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -119,9 +118,9 @@ func (r *response) expect(status int) *response {
 func (r *response) text() string { return string(r.Body) }
 
 func truncate(b []byte) string {
-	const max = 400
-	if len(b) > max {
-		return string(b[:max]) + "…"
+	const limit = 400
+	if len(b) > limit {
+		return string(b[:limit]) + "…"
 	}
 	return string(b)
 }
@@ -312,10 +311,3 @@ func vevent(uid, summary, dtstart string, extra ...string) string {
 func countLines(body, prefix string) int {
 	return strings.Count(body, prefix)
 }
-
-func jsonBody(v any) string {
-	b, _ := json.Marshal(v)
-	return string(b)
-}
-
-var _ = fmt.Sprintf // keep fmt available for ad-hoc debugging in tests

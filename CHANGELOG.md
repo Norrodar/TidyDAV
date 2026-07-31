@@ -180,6 +180,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- CI publishes container images again. The lint job pinned golangci-lint v1.64.8, a
+  release built against an older Go that cannot type-check a `go 1.25` module, so the
+  step failed on every commit since it was introduced — and because the image build
+  depends on it, nine commits' worth of fixes never reached ghcr.io. The linter is now
+  on v2 (`golangci-lint-action@v8`, v2.12.2) with a migrated config, and the findings it
+  surfaced are fixed rather than silenced: a preview loop that always broke on its first
+  iteration reads as the single lookup it is, `max` and `cap` no longer shadow builtins,
+  the SQLite driver's blank import states why it exists, unused test parameters and one
+  dead test helper are gone, and imports are grouped as the config always demanded. Two
+  checks stay off with the reason recorded in `.golangci.yml`: `govet.shadow`, which only
+  ever flagged the idiomatic `if err := f(); err != nil`, and `misspell`'s locale, since
+  the prose is British while identifiers and fixed names like `STATUS:CANCELLED` are not.
 - One-way sync is now a real mirror. It never listed the destination, so an item
   deleted or edited there stayed that way forever: the source ETag was unchanged, the
   fast path skipped the item, and the state kept claiming the copy existed. Each run

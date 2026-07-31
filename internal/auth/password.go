@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Norrodar/TidyDAV/internal/store"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/Norrodar/TidyDAV/internal/store"
 )
 
 func hashPassword(password string) (string, error) {

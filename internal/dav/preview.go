@@ -6,8 +6,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Norrodar/TidyDAV/internal/ics"
 	"github.com/emersion/go-vcard"
+
+	"github.com/Norrodar/TidyDAV/internal/ics"
 )
 
 // PreviewEntry is a compact, display-only view of one DAV item used by the
@@ -34,13 +35,15 @@ func Summarize(kind string, data []byte) PreviewEntry {
 		return e
 	default: // caldav
 		e := PreviewEntry{UID: CalendarUID(data)}
+		// A preview line describes the item, and a DAV item holds one event
+		// (plus any recurrence overrides), so the first one is the item.
 		if cal, err := ics.Parse(bytes.NewReader(data)); err == nil {
-			for _, ev := range cal.Events() {
+			if events := cal.Events(); len(events) > 0 {
+				ev := events[0]
 				e.Title = ics.Text(ev, ics.FieldSummary)
 				if t, err := ev.DateTimeStart(time.UTC); err == nil && !t.IsZero() {
 					e.When = t.Format(time.RFC3339)
 				}
-				break
 			}
 		}
 		return e

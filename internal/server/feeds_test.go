@@ -266,7 +266,7 @@ func TestCheckSource(t *testing.T) {
 
 func TestNotifyTest(t *testing.T) {
 	var received int
-	sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	sink := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			received++
 		}

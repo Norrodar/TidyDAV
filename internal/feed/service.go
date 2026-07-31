@@ -15,12 +15,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/emersion/go-ical"
+
 	"github.com/Norrodar/TidyDAV/internal/ics"
 	"github.com/Norrodar/TidyDAV/internal/outbound"
 	"github.com/Norrodar/TidyDAV/internal/pipeline"
 	"github.com/Norrodar/TidyDAV/internal/proxy"
 	"github.com/Norrodar/TidyDAV/internal/store"
-	"github.com/emersion/go-ical"
 )
 
 // Service renders feeds.

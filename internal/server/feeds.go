@@ -9,11 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/Norrodar/TidyDAV/internal/feed"
 	"github.com/Norrodar/TidyDAV/internal/notify"
 	"github.com/Norrodar/TidyDAV/internal/pipeline"
 	"github.com/Norrodar/TidyDAV/internal/store"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // ── DTOs (kept in sync with web/src/lib/api.ts) ─────────────────────────────

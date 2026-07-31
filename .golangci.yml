@@ -1,38 +1,58 @@
-# golangci-lint configuration (v1 schema; pin the linter version in CI).
+# golangci-lint configuration (v2 schema; the version is pinned in CI so a new
+# release never turns a green branch red on its own).
+version: "2"
 run:
-  timeout: 5m
   tests: true
-
 linters:
   enable:
-    - errcheck
-    - errorlint
     - bodyclose
-    - gofmt
-    - goimports
-    - govet
-    - ineffassign
+    - errorlint
     - misspell
     - revive
-    - staticcheck
     - unconvert
-    - unused
-
-linters-settings:
-  goimports:
-    local-prefixes: github.com/Norrodar/TidyDAV
-  govet:
-    enable:
-      - shadow
-  misspell:
-    locale: US
-
+  settings:
+    # Two linter knobs are deliberately left at their defaults:
+    #
+    #   govet.shadow — every hit was the idiomatic `if err := f(); err != nil`.
+    #   misspell.locale — neither locale fits. The prose is British ("initialised",
+    #     "behaviour") while identifiers follow Go/US convention ("Serialize"), and
+    #     RFC 5545's STATUS:CANCELLED and TIDYDAV_ACCENT_COLOR are fixed spellings
+    #     we do not own. Without a locale, misspell still catches real typos and
+    #     stops arguing about variants.
+    misspell: {}
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - bodyclose
+          - errcheck
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      # Vendored Go files shipped inside npm packages are not ours to lint.
+      - web/node_modules
 issues:
-  exclude-rules:
-    # Test files may ignore errors for brevity in setup/teardown.
-    - path: _test\.go
-      linters:
-        - errcheck
-        - bodyclose
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/Norrodar/TidyDAV
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - web/node_modules

@@ -8,10 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Norrodar/TidyDAV/internal/ics"
-	"github.com/Norrodar/TidyDAV/internal/outbound"
 	"github.com/emersion/go-webdav"
 	"github.com/emersion/go-webdav/caldav"
+
+	"github.com/Norrodar/TidyDAV/internal/ics"
+	"github.com/Norrodar/TidyDAV/internal/outbound"
 )
 
 // davHTTPClient builds an HTTP client with a timeout (so a hung server cannot

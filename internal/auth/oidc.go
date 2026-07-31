@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Norrodar/TidyDAV/internal/config"
-	"github.com/Norrodar/TidyDAV/internal/store"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
+
+	"github.com/Norrodar/TidyDAV/internal/config"
+	"github.com/Norrodar/TidyDAV/internal/store"
 )
 
 type oidcProvider struct {

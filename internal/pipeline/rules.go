@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Norrodar/TidyDAV/internal/ics"
 	"github.com/emersion/go-ical"
+
+	"github.com/Norrodar/TidyDAV/internal/ics"
 )
 
 // ── Filter ───────────────────────────────────────────────────────────────────

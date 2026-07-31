@@ -214,7 +214,7 @@ func TestInputValidation(t *testing.T) {
 			"aUrl": "https://a/dav/", "bUrl": "https://b/dav/", "windowStart": "not-a-date"}},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.name, func(_ *testing.T) {
 			c.post(tc.path, tc.body).expect(http.StatusBadRequest)
 		})
 	}

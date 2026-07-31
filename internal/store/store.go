@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"time"
 
+	// Registers the pure-Go "sqlite" driver with database/sql. It is only ever
+	// used through the driver name, so the import has no referenced symbols.
 	_ "modernc.org/sqlite"
 )
 

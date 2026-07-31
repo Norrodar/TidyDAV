@@ -49,7 +49,7 @@ func TestNotifierDispatchesOncePerEvent(t *testing.T) {
 	upstream := upstreamServer(t)
 
 	var hits int32
-	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	target := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&hits, 1)
 	}))
 	defer target.Close()

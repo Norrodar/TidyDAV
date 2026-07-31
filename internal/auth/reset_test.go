@@ -29,8 +29,8 @@ func tokenFromBody(t *testing.T, body string) string {
 
 func TestPasswordResetFlow(t *testing.T) {
 	svc := newService(t, config.AccessAuth, true)
-	cap := &captureMailer{}
-	svc.mailer = cap
+	mailer := &captureMailer{}
+	svc.mailer = mailer
 	ctx := context.Background()
 
 	if _, err := svc.Register(ctx, "r@example.com", "oldpassword"); err != nil {
@@ -39,7 +39,7 @@ func TestPasswordResetFlow(t *testing.T) {
 	if err := svc.RequestPasswordReset(ctx, "r@example.com"); err != nil {
 		t.Fatalf("RequestPasswordReset: %v", err)
 	}
-	token := tokenFromBody(t, cap.lastBody)
+	token := tokenFromBody(t, mailer.lastBody)
 
 	if err := svc.ConfirmPasswordReset(ctx, token, "newpassword"); err != nil {
 		t.Fatalf("ConfirmPasswordReset: %v", err)
@@ -58,12 +58,12 @@ func TestPasswordResetFlow(t *testing.T) {
 
 func TestRequestResetUnknownEmailIsSilent(t *testing.T) {
 	svc := newService(t, config.AccessAuth, true)
-	cap := &captureMailer{}
-	svc.mailer = cap
+	mailer := &captureMailer{}
+	svc.mailer = mailer
 	if err := svc.RequestPasswordReset(context.Background(), "nobody@example.com"); err != nil {
 		t.Fatalf("RequestPasswordReset: %v", err)
 	}
-	if cap.lastBody != "" {
+	if mailer.lastBody != "" {
 		t.Error("should not send mail for an unknown email")
 	}
 }

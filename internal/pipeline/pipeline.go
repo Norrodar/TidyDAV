@@ -3,8 +3,9 @@ package pipeline
 import (
 	"fmt"
 
-	"github.com/Norrodar/TidyDAV/internal/ics"
 	"github.com/emersion/go-ical"
+
+	"github.com/Norrodar/TidyDAV/internal/ics"
 )
 
 // Rule transforms a calendar in place.

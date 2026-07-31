@@ -472,7 +472,10 @@ func TestBodyHashDistinguishesBodies(t *testing.T) {
 	if bodyHash([]byte("a")) == bodyHash([]byte("b")) {
 		t.Error("different bodies share a fingerprint")
 	}
-	if bodyHash([]byte("a")) != bodyHash([]byte("a")) {
+	// Equal content in two distinct slices must hash equally: the mirror compares
+	// fingerprints across runs, never the slices themselves.
+	same := []byte{'a'}
+	if bodyHash([]byte("a")) != bodyHash(same) {
 		t.Error("fingerprint is not stable")
 	}
 	if len(bodyHash(nil)) != 32 {
