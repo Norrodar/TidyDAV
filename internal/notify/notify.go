@@ -6,11 +6,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -64,38 +62,18 @@ func post(ctx context.Context, client *http.Client, url, contentType string, bod
 	return nil
 }
 
-// redactURL strips the query string (e.g. a Gotify ?token=) and masks any
-// userinfo password so credentials never reach logs.
-func redactURL(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "[redacted]"
-	}
-	u.RawQuery = ""
-	return u.Redacted()
-}
+// redactURL and redactError are the shared outbound helpers: a notification
+// URL carries its credentials in the query (a Gotify token) or in its userinfo,
+// and neither may reach a log, an API response or a third-party server.
+func redactURL(raw string) string { return outbound.RedactURL(raw) }
 
 // RedactURL returns raw without its query string (e.g. a Gotify ?token=) and
 // with any userinfo password masked. Callers that put a user-supplied URL into
 // a notification body must run it through this first: the message is delivered
 // to third-party servers (ntfy.sh, Gotify) and must never carry credentials.
-func RedactURL(raw string) string { return redactURL(raw) }
+func RedactURL(raw string) string { return outbound.RedactURL(raw) }
 
-// redactError removes the raw URL from an error's message. Go's transport
-// errors embed the request URL verbatim, which leaks the Gotify token.
-func redactError(err error, raw string) error {
-	msg := err.Error()
-	if raw == "" || !strings.Contains(msg, raw) {
-		// Unwrap the URL error so its own formatting (which re-adds the URL)
-		// is not reused.
-		var uerr *url.Error
-		if errors.As(err, &uerr) {
-			return uerr.Err
-		}
-		return err
-	}
-	return errors.New(strings.ReplaceAll(msg, raw, redactURL(raw)))
-}
+func redactError(err error, raw string) error { return outbound.RedactError(err, raw) }
 
 func title(ev Event) string {
 	if ev.Summary != "" {

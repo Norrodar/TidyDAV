@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Norrodar/TidyDAV/internal/ics"
+	"github.com/Norrodar/TidyDAV/internal/outbound"
 	"github.com/Norrodar/TidyDAV/internal/pipeline"
 	"github.com/Norrodar/TidyDAV/internal/proxy"
 	"github.com/Norrodar/TidyDAV/internal/store"
@@ -162,12 +163,12 @@ func (s *Service) merge(ctx context.Context, f *store.Feed) (*ical.Calendar, map
 	for _, src := range f.Sources {
 		body, _, err := s.fetcher.FetchAuth(ctx, src.URL, ttl, src.Username, src.Password)
 		if err != nil {
-			s.log.Warn("feed source unavailable", "feed", f.ID, "url", src.URL, "error", err)
+			s.log.Warn("feed source unavailable", "feed", f.ID, "url", outbound.RedactURL(src.URL), "error", err)
 			continue
 		}
 		cal, err := ics.Parse(bytes.NewReader(body))
 		if err != nil {
-			s.log.Warn("feed source parse failed", "feed", f.ID, "url", src.URL, "error", err)
+			s.log.Warn("feed source parse failed", "feed", f.ID, "url", outbound.RedactURL(src.URL), "error", err)
 			continue
 		}
 		fetched++

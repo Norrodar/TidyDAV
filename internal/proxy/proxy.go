@@ -99,23 +99,25 @@ func (f *Fetcher) FetchAuth(ctx context.Context, url string, ttl time.Duration, 
 	body, etag, fetchErr := f.fetchUpstream(ctx, url, cached, username, password)
 	if fetchErr != nil {
 		if hasCache {
-			f.log.Warn("upstream fetch failed; serving stale cache", "url", url, "error", fetchErr)
+			f.log.Warn("upstream fetch failed; serving stale cache",
+				"url", outbound.RedactURL(url), "error", outbound.RedactError(fetchErr, url))
 			return cached.Body, SourceCacheStale, nil
 		}
-		return nil, SourceNone, fmt.Errorf("proxy: fetch %s: %w", url, fetchErr)
+		return nil, SourceNone, fmt.Errorf("proxy: fetch %s: %w",
+			outbound.RedactURL(url), outbound.RedactError(fetchErr, url))
 	}
 
 	// A 304 yields a nil body: reuse the cached copy.
 	if body == nil {
 		if !hasCache {
-			return nil, SourceNone, fmt.Errorf("proxy: empty response for %s", url)
+			return nil, SourceNone, fmt.Errorf("proxy: empty response for %s", outbound.RedactURL(url))
 		}
 		body = cached.Body
 	}
 
 	put := &store.CachedFeed{Key: key, URL: url, Body: body, ETag: etag, FetchedAt: f.now().UTC()}
 	if err := f.cache.PutCachedFeed(ctx, put); err != nil {
-		f.log.Warn("failed to update feed cache", "url", url, "error", err)
+		f.log.Warn("failed to update feed cache", "url", outbound.RedactURL(url), "error", err)
 	}
 	return body, SourceUpstream, nil
 }

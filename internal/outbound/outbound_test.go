@@ -1,9 +1,12 @@
 package outbound
 
 import (
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -83,5 +86,48 @@ func TestClientTimeoutIsApplied(t *testing.T) {
 	}
 	if got := Client(7*time.Second, false).Timeout; got != 7*time.Second {
 		t.Errorf("hardened timeout = %v, want 7s", got)
+	}
+}
+
+func TestRedactURL(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		// A secret-address calendar link is a bearer token in the query.
+		{"https://cal.example.com/private/abc.ics?token=s3cr3t", "https://cal.example.com/private/abc.ics"},
+		// A password pasted into the URL must never survive into a log line.
+		{"https://user:hunter2@cal.example.com/x.ics", "https://user:xxxxx@cal.example.com/x.ics"},
+		{"https://cal.example.com/x.ics#frag", "https://cal.example.com/x.ics"},
+		{"https://cal.example.com/x.ics", "https://cal.example.com/x.ics"},
+		{"://not a url", "[redacted]"},
+	}
+	for _, tc := range cases {
+		if got := RedactURL(tc.in); got != tc.want {
+			t.Errorf("RedactURL(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+		if strings.Contains(RedactURL(tc.in), "hunter2") || strings.Contains(RedactURL(tc.in), "s3cr3t") {
+			t.Errorf("RedactURL(%q) leaked a secret", tc.in)
+		}
+	}
+}
+
+func TestRedactError(t *testing.T) {
+	raw := "https://user:hunter2@cal.example.com/x.ics?token=s3cr3t"
+
+	// Go's transport embeds the request URL verbatim.
+	wrapped := &url.Error{Op: "Get", URL: raw, Err: errors.New("dial tcp: timeout")}
+	got := RedactError(wrapped, raw)
+	if strings.Contains(got.Error(), "hunter2") || strings.Contains(got.Error(), "s3cr3t") {
+		t.Errorf("RedactError kept the credentials: %v", got)
+	}
+
+	// An error that does not carry the URL is unwrapped rather than reformatted.
+	other := &url.Error{Op: "Get", URL: raw, Err: errors.New("connection refused")}
+	if got := RedactError(other, "https://other.example.com"); got.Error() != "connection refused" {
+		t.Errorf("RedactError = %q, want the unwrapped cause", got)
+	}
+	if RedactError(nil, raw) != nil {
+		t.Error("RedactError(nil) is not nil")
 	}
 }
