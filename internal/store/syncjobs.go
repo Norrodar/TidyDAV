@@ -96,6 +96,22 @@ func (s *Store) UpdateSyncJobRun(ctx context.Context, id string, state json.RawM
 	return nil
 }
 
+// ResetSyncJobState clears the persisted sync state of a job owned by userID.
+// The next run then treats both sides as it would on a first run: nothing is
+// deleted (no state claims an item ever existed) and a one-way job refills its
+// destination from the source. This is the way out of a run blocked by
+// dav.ErrCollectionVanished, without losing the job's configuration.
+func (s *Store) ResetSyncJobState(ctx context.Context, id, userID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE sync_jobs SET state = '', last_status = '', updated_at = ? WHERE id = ? AND user_id = ?`,
+		time.Now().UTC().Format(time.RFC3339), id, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("reset sync job state: %w", err)
+	}
+	return checkAffected(res)
+}
+
 // DeleteSyncJob removes a job owned by userID.
 func (s *Store) DeleteSyncJob(ctx context.Context, id, userID string) error {
 	res, err := s.db.ExecContext(ctx, "DELETE FROM sync_jobs WHERE id = ? AND user_id = ?", id, userID)

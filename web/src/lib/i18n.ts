@@ -283,6 +283,12 @@ const en: Translations = {
   sync_status_hint: 'Created / updated / deleted on the destination in the last run.',
   sync_mirror_hint:
     'One-way jobs mirror the source: items deleted or edited on the destination are restored on the next run.',
+  sync_blocked_hint:
+    'This job is blocked: one side listed nothing although the last run saw a full collection there. Check both collection URLs. If the collection really is empty, reset the sync state — the job keeps its configuration.',
+  reset_state: 'Reset sync state',
+  reset_state_confirm:
+    'Reset the sync state of “{name}”? The next run treats both sides as new: nothing is deleted, and a one-way job refills its destination from the source.',
+  sync_state_reset: 'Sync state reset',
   never: 'never',
   disabled: 'disabled',
   delete_sync_confirm: 'Delete sync job “{name}”?',
@@ -601,6 +607,12 @@ const de: Translations = {
   sync_status_hint: 'Im letzten Lauf am Ziel erstellt / aktualisiert / gelöscht.',
   sync_mirror_hint:
     'Einweg-Jobs spiegeln die Quelle: am Ziel gelöschte oder geänderte Einträge werden beim nächsten Lauf wiederhergestellt.',
+  sync_blocked_hint:
+    'Dieser Job ist blockiert: eine Seite hat nichts geliefert, obwohl der letzte Lauf dort eine volle Sammlung gesehen hat. Prüfe beide Sammlungs-URLs. Ist die Sammlung wirklich leer, setze den Sync-Status zurück — die Konfiguration des Jobs bleibt erhalten.',
+  reset_state: 'Sync-Status zurücksetzen',
+  reset_state_confirm:
+    'Sync-Status von „{name}" zurücksetzen? Der nächste Lauf behandelt beide Seiten als neu: es wird nichts gelöscht, und ein Einweg-Job füllt sein Ziel wieder aus der Quelle.',
+  sync_state_reset: 'Sync-Status zurückgesetzt',
   never: 'nie',
   disabled: 'deaktiviert',
   delete_sync_confirm: 'Sync-Job „{name}" löschen?',

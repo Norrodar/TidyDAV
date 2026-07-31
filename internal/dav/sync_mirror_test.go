@@ -283,6 +283,140 @@ func TestSyncOneWayRepairRespectsWindow(t *testing.T) {
 	}
 }
 
+// failGetColl makes one destination object unreadable, the way a server does
+// for a single corrupt or permission-protected resource.
+type failGetColl struct {
+	*fakeColl
+	failHref string
+}
+
+func (c *failGetColl) Get(ctx context.Context, href string) (Item, error) {
+	if href == c.failHref {
+		return Item{}, errors.New("403 forbidden")
+	}
+	return c.fakeColl.Get(ctx, href)
+}
+
+// One unreadable object on the destination must not stop the run: every other
+// item is still repaired and the deletion pass still runs. Aborting would mean a
+// single broken resource freezes the whole job forever.
+func TestSyncOneWayContinuesWhenADestinationItemIsUnreadable(t *testing.T) {
+	ctx := context.Background()
+	src, base := newFake(), newFake()
+	st := NewState()
+	opts := Options{Direction: AToB, UID: uid}
+
+	for _, u := range []string{"uid-1", "uid-2", "uid-3"} {
+		src.set("/"+u, "e1", u+"|v1")
+	}
+	broken := &failGetColl{fakeColl: base}
+	dst := &recordColl{Collection: broken}
+	if _, err := Sync(ctx, src, dst, st, opts); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
+	dst.reset()
+
+	// uid-1: its destination copy becomes unreadable (and its ETag moved, so the
+	// cheap path cannot skip the read). uid-2: edited on the destination, must
+	// still be repaired. uid-3: gone from the source, must still be deleted.
+	broken.failHref = st.Items["uid-1"].DstHref
+	base.set(broken.failHref, "moved", "uid-1|v1")
+	base.set(st.Items["uid-2"].DstHref, "tampered", "uid-2|edited-on-destination")
+	delete(src.items, "/uid-3")
+
+	res, err := Sync(ctx, src, dst, st, opts)
+	if err == nil {
+		t.Fatal("run reported success although an item could not be verified")
+	}
+	if !strings.Contains(err.Error(), "could not be verified") {
+		t.Errorf("error = %v, want it to name the unverified items", err)
+	}
+	if (res != Result{Updated: 1, Deleted: 1}) {
+		t.Errorf("result = %+v, want {Updated:1 Deleted:1} — later items must still be processed", res)
+	}
+	if got := string(base.items[st.Items["uid-2"].DstHref].Data); got != "uid-2|v1" {
+		t.Errorf("uid-2 = %q, want the source body restored", got)
+	}
+	if _, ok := st.Items["uid-3"]; ok {
+		t.Error("deletion pass did not run")
+	}
+	if _, ok := st.Items["uid-1"]; !ok {
+		t.Error("the unverifiable item was dropped from the state")
+	}
+	if _, ok := base.items[broken.failHref]; !ok {
+		t.Error("the unverifiable item was deleted on the destination")
+	}
+}
+
+// The deletion counter reports what was removed from the destination. An item
+// the user already deleted there is not counted a second time by TidyDAV.
+func TestSyncOneWayCountsOnlyDeletesItIssued(t *testing.T) {
+	ctx := context.Background()
+	base := newFake()
+	src, dst, st, opts := mirrored(t, base)
+
+	delete(base.items, st.Items["uid-A"].DstHref) // deleted by hand on the destination
+	delete(src.items, "/a")                       // and gone from the source in the same run
+
+	res, err := Sync(ctx, src, dst, st, opts)
+	if err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	if res != (Result{}) {
+		t.Errorf("result = %+v, want zero: TidyDAV deleted nothing", res)
+	}
+	if dst.deletes != 0 {
+		t.Errorf("deletes = %d, want 0", dst.deletes)
+	}
+	if _, ok := st.Items["uid-A"]; ok {
+		t.Error("state entry survived although source and destination copies are gone")
+	}
+}
+
+// State from a release without fingerprints must not be rewritten wholesale —
+// not even when the source hands out a fresh ETag on every listing, which is
+// what makes the fast path miss.
+func TestSyncOneWayAdoptsLegacyStateWhenSourceETagsChurn(t *testing.T) {
+	ctx := context.Background()
+	srcBase, dstBase := newFake(), newFake()
+	src := &churnColl{fakeColl: srcBase}
+	dst := &recordColl{Collection: dstBase}
+	st := NewState()
+	opts := Options{Direction: AToB, UID: uid}
+
+	for i := 0; i < 10; i++ {
+		u := fmt.Sprintf("uid-%d", i)
+		srcBase.set("/"+u, "e1", u+"|v1")
+	}
+	if _, err := Sync(ctx, src, dst, st, opts); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
+
+	for k, v := range st.Items { // as a state written before fingerprints existed
+		v.SrcHash, v.DstHash = "", ""
+		st.Items[k] = v
+	}
+	dst.reset()
+
+	res, err := Sync(ctx, src, dst, st, opts)
+	if err != nil {
+		t.Fatalf("upgrade run: %v", err)
+	}
+	if res != (Result{}) || dst.puts != 0 {
+		t.Fatalf("upgrade run rewrote the collection: result=%+v puts=%d", res, dst.puts)
+	}
+
+	// A real source change is still propagated afterwards.
+	srcBase.set("/uid-3", "e1", "uid-3|v2")
+	dst.reset()
+	if res, err = Sync(ctx, src, dst, st, opts); err != nil {
+		t.Fatalf("change run: %v", err)
+	}
+	if (res != Result{Updated: 1}) || dst.puts != 1 {
+		t.Errorf("change run: result=%+v puts=%d, want one update", res, dst.puts)
+	}
+}
+
 func TestNormHrefAndLookup(t *testing.T) {
 	idx := indexByHref([]ItemMeta{
 		{Href: "https://dav.example.com/cal/user/a%20b.ics", ETag: "e1"},

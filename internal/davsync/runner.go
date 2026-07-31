@@ -130,11 +130,24 @@ func (r *Runner) runLocked(ctx context.Context, job *store.SyncJob) {
 	}
 
 	res, err := dav.Sync(ctx, a, b, state, opts)
-	if err != nil {
-		r.finish(ctx, job, state, "error: "+err.Error())
-		return
+	r.finish(ctx, job, state, runStatus(res, err))
+}
+
+// runStatus renders the outcome of a run into the status line stored on the job
+// and shown in the UI.
+//
+// A tripped vanish guard gets its own word: unlike a transient error it does not
+// clear itself on the next run — it stays until a human checks the collection
+// URLs and resets the sync state. The UI keys the reset action off this prefix.
+func runStatus(res dav.Result, err error) string {
+	switch {
+	case errors.Is(err, dav.ErrCollectionVanished):
+		return "blocked: " + err.Error()
+	case err != nil:
+		return "error: " + err.Error()
+	default:
+		return fmt.Sprintf("ok: +%d ~%d -%d", res.Created, res.Updated, res.Deleted)
 	}
-	r.finish(ctx, job, state, fmt.Sprintf("ok: +%d ~%d -%d", res.Created, res.Updated, res.Deleted))
 }
 
 func (r *Runner) finish(ctx context.Context, job *store.SyncJob, state *dav.State, status string) {

@@ -2,6 +2,8 @@ package davsync
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Norrodar/TidyDAV/internal/dav"
 	"github.com/Norrodar/TidyDAV/internal/store"
 )
 
@@ -82,5 +85,33 @@ func TestRunnerInvalidKind(t *testing.T) {
 	job, _ := st.SyncJobByID(ctx, "j")
 	if !strings.HasPrefix(job.LastStatus, "config error") {
 		t.Errorf("status = %q, want config error", job.LastStatus)
+	}
+}
+
+// The status line is the only channel between a run and the UI, so its shape is
+// part of the contract: "blocked" marks the one outcome that needs a human.
+func TestRunStatus(t *testing.T) {
+	tests := []struct {
+		name string
+		res  dav.Result
+		err  error
+		want string
+	}{
+		{"success", dav.Result{Created: 1, Updated: 2, Deleted: 3}, nil, "ok: +1 ~2 -3"},
+		{"idle", dav.Result{}, nil, "ok: +0 ~0 -0"},
+		{"plain error", dav.Result{}, errors.New("boom"), "error: boom"},
+		{
+			"vanish guard",
+			dav.Result{},
+			fmt.Errorf("%w (side destination: 0 listed, 9 known)", dav.ErrCollectionVanished),
+			"blocked: " + dav.ErrCollectionVanished.Error() + " (side destination: 0 listed, 9 known)",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := runStatus(tc.res, tc.err); got != tc.want {
+				t.Errorf("runStatus = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

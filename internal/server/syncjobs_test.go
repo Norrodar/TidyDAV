@@ -65,6 +65,23 @@ func TestSyncJobsAPI(t *testing.T) {
 		t.Errorf("intruder get %d, want 404", rec.Code)
 	}
 
+	// Resetting the sync state is owner-scoped and keeps the configuration —
+	// including the stored password — so a blocked job can recover without
+	// being recreated.
+	if rec := do(t, srv, http.MethodPost, "/api/sync/"+created.ID+"/reset", "", intruder); rec.Code != http.StatusNotFound {
+		t.Errorf("intruder reset %d, want 404", rec.Code)
+	}
+	rec = do(t, srv, http.MethodPost, "/api/sync/"+created.ID+"/reset", "", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reset %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"aPasswordSet":true`) {
+		t.Errorf("reset dropped the stored password: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"lastStatus":""`) {
+		t.Errorf("reset left the blocked status behind: %s", rec.Body.String())
+	}
+
 	if rec := do(t, srv, http.MethodDelete, "/api/sync/"+created.ID, "", cookies); rec.Code != http.StatusNoContent {
 		t.Errorf("delete status %d", rec.Code)
 	}

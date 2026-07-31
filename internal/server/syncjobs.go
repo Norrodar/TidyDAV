@@ -165,6 +165,29 @@ func (s *Server) handleRunSyncJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toSyncJobResponse(job))
 }
 
+// handleResetSyncJobState clears a job's sync state. It is the documented way
+// out of a run blocked by the vanish guard (a collection that suddenly lists
+// nothing): the configuration, including the stored passwords, stays.
+func (s *Server) handleResetSyncJobState(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	job, ok := s.ownedSyncJob(w, r, u)
+	if !ok {
+		return
+	}
+	if err := s.app.Store.ResetSyncJobState(r.Context(), job.ID, u.ID); err != nil {
+		s.serverError(w, "reset sync job state", err)
+		return
+	}
+	s.app.Audit.Record(r.Context(), u, "sync.reset_state", job.ID, job.Name)
+	if reloaded, err := s.app.Store.SyncJobByID(r.Context(), job.ID); err == nil {
+		job = reloaded
+	}
+	writeJSON(w, http.StatusOK, toSyncJobResponse(job))
+}
+
 // ── Merge preview ────────────────────────────────────────────────────────────
 
 type syncPreviewRequest struct {

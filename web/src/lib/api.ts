@@ -316,6 +316,7 @@ export const api = {
       request<SyncJob>(`/api/sync/${id}`, jsonBody('PUT', input)),
     remove: (id: string) => request<void>(`/api/sync/${id}`, { method: 'DELETE' }),
     run: (id: string) => request<SyncJob>(`/api/sync/${id}/run`, { method: 'POST' }),
+    resetState: (id: string) => request<SyncJob>(`/api/sync/${id}/reset`, { method: 'POST' }),
     preview: (input: SyncPreviewInput, id?: string) =>
       request<SyncPreviewResult>(
         '/api/sync/preview',

@@ -68,6 +68,28 @@ func TestSyncJobCRUD(t *testing.T) {
 		t.Errorf("disabled job still listed as enabled")
 	}
 
+	// Resetting the state is owner-scoped and keeps the configuration: it is the
+	// way out of a run blocked by the vanish guard.
+	if err := st.UpdateSyncJobRun(ctx, "job-1", []byte(`{"items":{"u":{"uid":"u"}}}`), time.Now(), "blocked: dav: refusing to sync"); err != nil {
+		t.Fatalf("UpdateSyncJobRun: %v", err)
+	}
+	if err := st.ResetSyncJobState(ctx, "job-1", "intruder"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("cross-owner reset = %v, want ErrNotFound", err)
+	}
+	if got, _ = st.SyncJobByID(ctx, "job-1"); len(got.State) == 0 {
+		t.Fatal("cross-owner reset cleared the state")
+	}
+	if err := st.ResetSyncJobState(ctx, "job-1", "owner"); err != nil {
+		t.Fatalf("ResetSyncJobState: %v", err)
+	}
+	got, _ = st.SyncJobByID(ctx, "job-1")
+	if len(got.State) != 0 || got.LastStatus != "" {
+		t.Errorf("state not cleared: state=%q status=%q", got.State, got.LastStatus)
+	}
+	if got.Name != "Cal" || got.AURL != "https://a/cal" {
+		t.Errorf("reset changed the configuration: %+v", got)
+	}
+
 	// Owner-scoped delete.
 	if err := st.DeleteSyncJob(ctx, "job-1", "intruder"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("cross-owner delete = %v, want ErrNotFound", err)

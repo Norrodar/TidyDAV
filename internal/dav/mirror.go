@@ -84,6 +84,7 @@ const (
 	dstOK      dstStatus = iota // present and matching the recorded fingerprint
 	dstMissing                  // not listed on the destination any more
 	dstDrifted                  // present but its body no longer matches
+	dstUnknown                  // listed but unreadable this run (see inspectDst)
 )
 
 // inspectDst checks the destination copy described by st without writing
@@ -95,6 +96,16 @@ const (
 // item adopts whatever the destination currently holds instead of being
 // rewritten: adopting keeps drift that predates the baseline, rewriting would
 // re-upload every item of every collection once, which is far worse.
+//
+// Cost: a destination whose listing carries a stable ETag per item is verified
+// without a single GET. A destination that reissues ETags on every PROPFIND (or
+// exposes none at all) forces one GET per known item per run — that read is the
+// price of not rewriting the whole collection every run against such a server,
+// and reads are the cheaper and safer half of that trade.
+//
+// A failed read returns dstUnknown together with the error. The caller must not
+// abort the run over it: one unreadable object on the destination would
+// otherwise stop every later item and the deletion pass with it.
 func inspectDst(ctx context.Context, dst Collection, st ItemState, idx map[string]ItemMeta) (dstStatus, string, string, error) {
 	if st.DstHref == "" {
 		return dstMissing, "", "", nil
@@ -111,7 +122,7 @@ func inspectDst(ctx context.Context, dst Collection, st ItemState, idx map[strin
 	// edit from a server that reissues ETags on every listing.
 	item, err := dst.Get(ctx, meta.Href)
 	if err != nil {
-		return dstOK, "", "", fmt.Errorf("inspect destination %s: %w", meta.Href, err)
+		return dstUnknown, "", "", fmt.Errorf("inspect destination %s: %w", meta.Href, err)
 	}
 	etag := meta.ETag
 	if etag == "" {
@@ -132,6 +143,12 @@ func inspectDst(ctx context.Context, dst Collection, st ItemState, idx map[strin
 // so hashing the bytes we sent would flag the item as drifted on the very next
 // run and rewrite it forever. The read-back costs one GET per write, not per
 // item and not per run.
+//
+// etag is advisory: it is passed to the client so a conditional PUT can be sent
+// once go-webdav supports If-Match/If-None-Match (it does not today, see the
+// TODO in caldav/client.go). Until then a write is unconditional, i.e. a change
+// made on the destination between the listing and the write is overwritten
+// without a 412.
 func putMirror(ctx context.Context, dst Collection, href, etag string, data []byte) (string, string, string, error) {
 	stored, err := dst.Put(ctx, Item{Href: href, ETag: etag, Data: data})
 	if err != nil {

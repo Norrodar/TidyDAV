@@ -74,12 +74,28 @@ func syncOneWay(ctx context.Context, src, dst Collection, state *State, opts Opt
 
 	seen := make(map[string]bool, len(srcList))
 	filtered := make(map[string]bool) // out-of-window UIDs: skipped, protected from deletion
+
+	// A destination object we cannot read is skipped, not fatal: aborting would
+	// stop every later item and the deletion pass because of one broken resource
+	// on the far side. The failures are reported once the run is through.
+	var (
+		unverified    int
+		unverifiedErr error
+	)
+	noteUnverified := func(err error) {
+		unverified++
+		if unverifiedErr == nil {
+			unverifiedErr = err
+		}
+	}
+
 	for _, meta := range srcList {
 		var (
 			checkedUID string // UID whose destination copy was already inspected
 			status     dstStatus
 			dstETag    string
 			dstHash    string
+			inspectErr error
 		)
 
 		// Source unchanged: still verify the destination copy. Skipping that
@@ -90,8 +106,11 @@ func syncOneWay(ctx context.Context, src, dst Collection, state *State, opts Opt
 			if !ok {
 				cur = st
 			}
-			if status, dstETag, dstHash, err = inspectDst(ctx, dst, cur, dstIdx); err != nil {
-				return res, err
+			status, dstETag, dstHash, inspectErr = inspectDst(ctx, dst, cur, dstIdx)
+			if inspectErr != nil {
+				noteUnverified(inspectErr)
+				seen[st.UID] = true // never delete what could not be verified
+				continue
 			}
 			checkedUID = st.UID
 			if status == dstOK {
@@ -126,12 +145,21 @@ func syncOneWay(ctx context.Context, src, dst Collection, state *State, opts Opt
 		// Compare bodies, not ETags: sources that reissue ETags without any
 		// content change (a plain re-save on Nextcloud/SOGo) must not cause a
 		// write. A changed body always changes the hash, so nothing is missed.
-		srcChanged := cur.SrcHash == "" || cur.SrcHash != srcHash
+		//
+		// No recorded fingerprint means no baseline (state from a release before
+		// they existed): that is not evidence of a change. Treating it as one
+		// would rewrite every item once after an upgrade whenever the source
+		// hands out fresh ETags — the very mass re-upload the destination-side
+		// adoption in inspectDst avoids. A genuinely new item reaches the
+		// destination through dstMissing, not through this flag.
+		srcChanged := cur.SrcHash != "" && cur.SrcHash != srcHash
 		cur.SrcHash = srcHash
 
 		if checkedUID != uid {
-			if status, dstETag, dstHash, err = inspectDst(ctx, dst, cur, dstIdx); err != nil {
-				return res, err
+			status, dstETag, dstHash, inspectErr = inspectDst(ctx, dst, cur, dstIdx)
+			if inspectErr != nil {
+				noteUnverified(inspectErr)
+				continue // seen above: protected from the deletion pass
 			}
 		}
 
@@ -170,17 +198,24 @@ func syncOneWay(ctx context.Context, src, dst Collection, state *State, opts Opt
 			continue
 		}
 		if st.DstHref != "" {
-			// Skip the DELETE when the destination copy is already gone.
+			// Skip the DELETE when the destination copy is already gone — and
+			// do not count it either: the counter reports what this run removed
+			// from the destination, not how many state entries it dropped.
 			if _, ok := lookupMeta(dstIdx, st.DstHref); ok {
 				if err := dst.Delete(ctx, st.DstHref); err != nil {
 					return res, fmt.Errorf("delete %s: %w", st.DstHref, err)
 				}
+				res.Deleted++
 			}
 		}
 		delete(state.Items, uid)
-		res.Deleted++
 	}
 
+	// Everything that could be done is done — including the deletions — before
+	// the run reports the objects it could not read.
+	if unverifiedErr != nil {
+		return res, fmt.Errorf("%d destination item(s) could not be verified: %w", unverified, unverifiedErr)
+	}
 	return res, nil
 }
 

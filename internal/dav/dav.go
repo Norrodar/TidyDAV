@@ -133,9 +133,14 @@ type Result struct {
 // collection URL, a server answering PROPFIND with an empty result) rather than
 // a genuine mass deletion — and propagating it would wipe the other side
 // irreversibly.
+//
+// The block is deliberate and permanent until a human looks: the way out is to
+// check the collection URLs and then reset the job's sync state, which makes
+// TidyDAV accept what the two sides currently hold. For a one-way job that
+// means the destination is filled from the source again.
 var ErrCollectionVanished = errors.New(
 	"dav: refusing to sync: one side is empty although the previous run saw a full collection there; " +
-		"check the collection URLs, then recreate the job to accept the new state")
+		"check the collection URLs, then reset the job's sync state to accept the current contents")
 
 // vanishGuardThreshold is how many previously known items make a suddenly empty
 // listing look like a broken endpoint rather than a user emptying a small

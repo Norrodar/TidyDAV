@@ -94,16 +94,36 @@
   }
 
   // Explains the "+C ~U -D" counters, and for one-way jobs that the destination
-  // is mirrored (deletions and edits there are undone on the next run).
+  // is mirrored (deletions and edits there are undone on the next run). A
+  // blocked job gets the instructions for its own way out instead.
   function statusHint(job: SyncJob): string {
+    if (isBlocked(job)) return t('sync_blocked_hint');
     const hint = t('sync_status_hint');
     return job.direction === 'bidirectional' ? hint : `${hint} ${t('sync_mirror_hint')}`;
   }
 
+  // The vanish guard stopped the run: it stays stopped until the state is reset.
+  function isBlocked(job: SyncJob): boolean {
+    return job.lastStatus.startsWith('blocked');
+  }
+
   function statusClass(status: string): string {
     if (status.startsWith('ok')) return 'badge badge-ok';
-    if (status.startsWith('error') || status.startsWith('config')) return 'badge badge-error';
+    if (status.startsWith('error') || status.startsWith('config') || status.startsWith('blocked'))
+      return 'badge badge-error';
     return 'badge';
+  }
+
+  async function resetState(job: SyncJob) {
+    if (!(await confirmDialog.ask(tf('reset_state_confirm', { name: job.name }), t('reset_state'))))
+      return;
+    try {
+      const updated = await api.sync.resetState(job.id);
+      jobs = jobs.map((j) => (j.id === updated.id ? updated : j));
+      toasts.show(t('sync_state_reset'));
+    } catch (e) {
+      error = e instanceof Error ? e.message : t('save_failed');
+    }
   }
 
   async function remove(job: SyncJob) {
@@ -166,6 +186,11 @@
             >
               {running === job.id ? t('running') : t('run_now')}
             </button>
+            {#if isBlocked(job)}
+              <button class="button button-secondary" onclick={() => resetState(job)}>
+                {t('reset_state')}
+              </button>
+            {/if}
             <a class="button button-secondary" href={`/sync/${job.id}`}>{t('edit')}</a>
             <button class="button button-secondary danger" onclick={() => remove(job)}
               >{t('delete')}</button

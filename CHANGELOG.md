@@ -161,6 +161,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   including the weak form a gzipping reverse proxy hands back. `304` reaches
   Basic-Auth-protected calendars only after successful authentication, and it still
   counts as a fetch in the subscriber statistics.
+- Reset the sync state of a job (`POST /api/sync/{id}/reset`, plus a button in the
+  jobs list). A run stopped by the vanish guard stays stopped by design — but the only
+  way out used to be deleting the job and typing its configuration in again. A job in
+  that state now reports `blocked:` instead of `error:`, explains itself in the status
+  tooltip and offers the reset, which clears only the remembered state: the next run
+  treats both sides as new, deletes nothing, and a one-way job refills its destination
+  from the source. URLs, credentials and schedule survive.
 
 ### Changed
 
@@ -187,6 +194,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   TidyDAV does not manage stay untouched, and the date window keeps protecting
   out-of-window items from both restore and deletion. Bidirectional jobs are
   unchanged.
+  A destination object that cannot be read — one corrupt or permission-protected
+  resource on the far side — is skipped and reported at the end of the run instead of
+  aborting it: it must not stop the items behind it or the deletion pass. The
+  deletion counter reports what TidyDAV actually removed, so a copy the user had
+  already deleted is not counted again. Note that a destination which hands out fresh
+  ETags on every listing, or none at all, has to be read in full on every run; that is
+  the price of not rewriting the whole collection instead.
 - **Security:** the upstream cache was keyed by URL alone, so a copy fetched with
   credentials could be served to — or overwritten by — a request that supplied none.
   On a multi-user instance that exposed another user's private calendar to anyone who
@@ -200,6 +214,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   because Go's transport errors embed the request URL. Errors are now redacted.
 - **Security:** every `/ics/<secret>` request logged the secret, the feed's only
   credential, on every calendar-client poll. The path is now masked in request logs.
+- **Security:** calendar source URLs were logged verbatim whenever a source was
+  unreachable or unparsable. A "secret address" link carries its token in the query
+  string, and a URL entered as `https://user:pass@host/cal.ics` carries the password —
+  both ended up in the log in clear text, as did the URL Go embeds in transport errors.
+  Source URLs are now redacted (`internal/outbound`) wherever they are logged or
+  returned, using the helper the notification path already had.
 - Expiry dropped recurring events whose series started long ago but still recurs —
   weekly meetings and yearly birthdays vanished from any calendar with an expire rule.
   Recurrence is now evaluated (`RRULE` `UNTIL`, `RDATE`), and series without a knowable
