@@ -94,6 +94,26 @@ const en: Translations = {
   refresh_badge_hours: 'checks every {n} h',
   basic_auth_badge: 'basic auth',
 
+  // Sharing the calendar link
+  share_link: 'Calendar link',
+  share_not_yet: 'Save the calendar first — then you get a link you can share.',
+  show_link: 'Show link',
+  hide_link: 'Hide link',
+  link_hidden_hint:
+    'Normally only the beginning of the link is shown, so nobody can read it off a screenshot or a shared screen.',
+  subscribe: 'Subscribe',
+  subscribe_hint: 'Opens your calendar app and offers to add this calendar.',
+  replace_link_desc:
+    'Anyone who knows this link can read the calendar — there is no password on it. If the link ended up somewhere it should not be, replace it with a new one.',
+  replace_link: 'Replace link',
+  replacing_link: 'Replacing…',
+  replace_link_confirm:
+    'Replace the link for “{name}”? The current link stops working right away. Every device and every person that uses this calendar — your phone, your laptop, anyone you sent it to — has to add it again with the new link.',
+  replace_link_confirm_action: 'Replace link',
+  link_replaced: 'New link created',
+  link_replaced_hint: 'The old link no longer works. Add the calendar again on every device.',
+  rotate_failed: 'The link could not be replaced. Please try again.',
+
   // Calendar editor
   edit_calendar: 'Edit calendar',
   new_calendar_heading: 'New calendar',
@@ -386,6 +406,27 @@ const de: Translations = {
   refresh_badge_minutes: 'prüft alle {n} Min.',
   refresh_badge_hours: 'prüft alle {n} Std.',
   basic_auth_badge: 'Basic Auth',
+
+  // Sharing the calendar link
+  share_link: 'Kalender-Link',
+  share_not_yet: 'Speichere den Kalender zuerst – danach bekommst du einen Link zum Teilen.',
+  show_link: 'Link anzeigen',
+  hide_link: 'Link verbergen',
+  link_hidden_hint:
+    'Normalerweise wird nur der Anfang des Links angezeigt, damit ihn niemand von einem Screenshot oder geteilten Bildschirm ablesen kann.',
+  subscribe: 'Abonnieren',
+  subscribe_hint: 'Öffnet deine Kalender-App und bietet an, diesen Kalender hinzuzufügen.',
+  replace_link_desc:
+    'Wer diesen Link kennt, kann den Kalender lesen – ein Passwort gibt es darauf nicht. Wenn der Link irgendwo gelandet ist, wo er nicht hingehört, ersetze ihn durch einen neuen.',
+  replace_link: 'Link ersetzen',
+  replacing_link: 'Wird ersetzt…',
+  replace_link_confirm:
+    'Den Link für „{name}“ ersetzen? Der bisherige Link funktioniert sofort nicht mehr. Jedes Gerät und jede Person, die diesen Kalender nutzt – dein Handy, dein Laptop, alle, denen du ihn geschickt hast – muss ihn mit dem neuen Link neu hinzufügen.',
+  replace_link_confirm_action: 'Link ersetzen',
+  link_replaced: 'Neuer Link erstellt',
+  link_replaced_hint:
+    'Der alte Link funktioniert nicht mehr. Füge den Kalender auf jedem Gerät neu hinzu.',
+  rotate_failed: 'Der Link konnte nicht ersetzt werden. Bitte noch einmal versuchen.',
 
   // Calendar editor
   edit_calendar: 'Kalender bearbeiten',

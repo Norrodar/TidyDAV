@@ -60,6 +60,64 @@ func TestCalendarLifecycle(t *testing.T) {
 	in.anonymous().get(path).expect(http.StatusNotFound)
 }
 
+// Rotating the link revokes the old URL and hands out a new one that serves the
+// very same calendar — the escape hatch for a link shared by mistake.
+func TestCalendarLinkRotation(t *testing.T) {
+	up := newUpstream(t, calendar(vevent("r@up", "Bioabfall", "20260615T000000Z")))
+	in := newInstance(t)
+	c := in.newClient()
+	c.register("rotate@example.com") // first user => admin, so the audit log is readable
+
+	feed := c.createFeed(map[string]any{
+		"name": "Abfall", "sources": []map[string]any{{"url": up.URL}},
+		"rules": []map[string]any{}, "ttlSeconds": 86400,
+	})
+	oldPath := icsPath(t, feed.ICSURL)
+	before := in.anonymous().get(oldPath).expect(http.StatusOK).text()
+
+	var rotated feedResult
+	c.post("/api/feeds/"+feed.ID+"/rotate-secret", nil).expect(http.StatusOK).decode(&rotated)
+	if rotated.Secret == feed.Secret {
+		t.Fatalf("secret unchanged after rotation: %q", rotated.Secret)
+	}
+	newPath := icsPath(t, rotated.ICSURL)
+	if newPath == oldPath {
+		t.Fatalf("icsUrl still points at the old link: %q", rotated.ICSURL)
+	}
+
+	// The link that leaked is dead, the new one serves byte-identical content.
+	in.anonymous().get(oldPath).expect(http.StatusNotFound)
+	after := in.anonymous().get(newPath).expect(http.StatusOK).text()
+	if after != before {
+		t.Errorf("calendar changed across rotation:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+
+	// The rotation is audited by feed id — and the audit log must not carry the
+	// secret it just replaced, nor the one it handed out.
+	var entries []struct {
+		Action string `json:"action"`
+		Target string `json:"target"`
+		Detail string `json:"detail"`
+	}
+	c.get("/api/audit").expect(http.StatusOK).decode(&entries)
+	var found bool
+	for _, e := range entries {
+		if e.Action != "feed.rotate-secret" {
+			continue
+		}
+		found = true
+		if e.Target != feed.ID {
+			t.Errorf("audit target = %q, want the feed id %q", e.Target, feed.ID)
+		}
+		if strings.Contains(e.Detail, feed.Secret) || strings.Contains(e.Detail, rotated.Secret) {
+			t.Errorf("audit detail leaked a secret: %q", e.Detail)
+		}
+	}
+	if !found {
+		t.Errorf("rotation was not audited: %+v", entries)
+	}
+}
+
 // Every rule type must still change the served calendar the way it claims to.
 func TestRulePipelineEndToEnd(t *testing.T) {
 	up := newUpstream(t, calendar(

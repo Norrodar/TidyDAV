@@ -189,6 +189,37 @@ func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.toFeedResponse(r.Context(), existing))
 }
 
+// handleRotateFeedSecret replaces the feed's secret-id, which is the only thing
+// guarding /ics. Sharing the link is irreversible, so this is the way out: the
+// previous URL stops resolving immediately and the response carries the new one.
+//
+// Ownership is enforced through ownedFeed, exactly like PUT — a foreign feed
+// answers 404 and its secret stays untouched.
+func (s *Server) handleRotateFeedSecret(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	f, ok := s.ownedFeed(w, r, u)
+	if !ok {
+		return
+	}
+	secret, err := randomToken()
+	if err != nil {
+		s.serverError(w, "generate secret", err)
+		return
+	}
+	f.Secret = secret
+	if err := s.app.Store.UpdateFeed(r.Context(), f); err != nil {
+		s.serverError(w, "rotate feed secret", err)
+		return
+	}
+	// The detail is the calendar name on purpose: the secret must never reach
+	// the audit log or the application log.
+	s.app.Audit.Record(r.Context(), u, "feed.rotate-secret", f.ID, f.Name)
+	writeJSON(w, http.StatusOK, s.toFeedResponse(r.Context(), f))
+}
+
 func (s *Server) handleDeleteFeed(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
 	if !ok {

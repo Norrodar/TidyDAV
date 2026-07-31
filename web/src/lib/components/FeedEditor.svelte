@@ -11,8 +11,10 @@
     type PreviewResult
   } from '$lib/api';
   import { toasts } from '$lib/state/toasts.svelte';
+  import { confirmDialog } from '$lib/state/confirm.svelte';
   import { t, tf, lang } from '$lib/i18n';
   import { weekStartDate, inWeek } from '$lib/week';
+  import { maskIcsUrl, webcalUrl } from '$lib/share';
 
   let { feed }: { feed?: Feed } = $props();
   const initial = untrack(() => feed);
@@ -416,7 +418,68 @@
 
   onDestroy(() => {
     for (const id of Object.values(checkTimers)) clearTimeout(id);
+    clearTimeout(copyTimer);
   });
+
+  // ── Sharing the calendar link ─────────────────────────────────────────────
+  // The `feed` prop is frozen through untrack, so the rotation updates this
+  // local copy instead. Rotating is independent of saving the form.
+  let icsUrl = $state(initial?.icsUrl ?? '');
+  let linkRevealed = $state(false);
+  let linkCopied = $state(false);
+  let linkRotated = $state(false);
+  let rotating = $state(false);
+  let shareError = $state<string | null>(null);
+  let copyTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Copies the full URL regardless of the reveal state. Without clipboard
+  // access the link is uncovered so it can be selected by hand.
+  async function copyLink() {
+    if (!navigator.clipboard?.writeText) {
+      shareError = t('copy_failed');
+      linkRevealed = true;
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(icsUrl);
+      linkCopied = true;
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => (linkCopied = false), 1500);
+    } catch {
+      shareError = t('copy_failed');
+      linkRevealed = true;
+    }
+  }
+
+  async function rotateLink() {
+    if (!feed) return;
+    const label = name.trim() || feed.name;
+    if (
+      !(await confirmDialog.ask(
+        tf('replace_link_confirm', { name: label }),
+        t('replace_link_confirm_action')
+      ))
+    )
+      return;
+    rotating = true;
+    shareError = null;
+    try {
+      const updated = await api.feeds.rotateSecret(feed.id);
+      icsUrl = updated.icsUrl;
+      // The old URL is gone: neither the reveal nor the "copied" confirmation
+      // refers to anything real any more.
+      linkRevealed = false;
+      linkCopied = false;
+      clearTimeout(copyTimer);
+      linkRotated = true;
+      toasts.show(t('link_replaced'));
+    } catch (e) {
+      if (await handledAuthError(e)) return;
+      shareError = e instanceof ApiError ? e.message : t('rotate_failed');
+    } finally {
+      rotating = false;
+    }
+  }
 
   // ── Test notifications ────────────────────────────────────────────────────
   let testing = $state<string | null>(null);
@@ -536,6 +599,65 @@
         </label>
         <p class="field-hint">{t('name_hint')}</p>
       </div>
+    </section>
+
+    <section class="card">
+      <h2>{t('share_link')}</h2>
+      {#if !feed}
+        <p class="muted">{t('share_not_yet')}</p>
+      {:else}
+        <div class="share-line">
+          <code class="url" id="share-url">{linkRevealed ? icsUrl : maskIcsUrl(icsUrl)}</code>
+          <button
+            type="button"
+            class="linklike"
+            aria-expanded={linkRevealed}
+            aria-controls="share-url"
+            disabled={rotating}
+            onclick={() => (linkRevealed = !linkRevealed)}
+          >
+            {linkRevealed ? t('hide_link') : t('show_link')}
+          </button>
+        </div>
+        {#if linkRevealed}
+          <p class="field-hint">{t('link_hidden_hint')}</p>
+        {/if}
+        {#if linkRotated}
+          <p class="link-warn">{t('link_replaced_hint')}</p>
+        {/if}
+
+        <div class="share-actions">
+          <a
+            class="button button-secondary"
+            class:link-off={rotating}
+            aria-disabled={rotating}
+            href={webcalUrl(icsUrl)}
+            rel="noopener"
+            title={t('subscribe_hint')}>{t('subscribe')}</a
+          >
+          <button
+            type="button"
+            class="button button-secondary"
+            onclick={copyLink}
+            disabled={rotating}
+          >
+            {linkCopied ? t('copied') : t('copy_url')}
+          </button>
+        </div>
+
+        <div class="share-foot">
+          <p class="share-desc">{t('replace_link_desc')}</p>
+          <button
+            type="button"
+            class="button button-secondary danger"
+            onclick={rotateLink}
+            disabled={rotating}
+          >
+            {rotating ? t('replacing_link') : t('replace_link')}
+          </button>
+        </div>
+        {#if shareError}<p class="error">{shareError}</p>{/if}
+      {/if}
     </section>
 
     <section class="card">
@@ -1482,6 +1604,65 @@
     cursor: pointer;
     color: var(--accent);
     font-size: var(--text-sm);
+  }
+  .linklike:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Sharing card */
+  .share-line {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+  .share-line .linklike {
+    font-size: var(--text-xs);
+    white-space: nowrap;
+  }
+  .url {
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+    word-break: break-all;
+  }
+  .link-warn {
+    margin: 0;
+    color: var(--warning);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+  }
+  .share-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  /* An anchor cannot be disabled; while the link is being replaced it must
+     still stop responding, otherwise it would hand out the dead URL. */
+  .link-off {
+    pointer-events: none;
+    opacity: 0.5;
+  }
+  .share-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--separator);
+  }
+  .share-desc {
+    margin: 0;
+    flex: 1 1 240px;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+  }
+  .danger:hover:not(:disabled) {
+    color: var(--danger);
+    border-color: var(--danger);
   }
   .button-sm {
     padding: var(--space-1) var(--space-3);

@@ -291,6 +291,9 @@ export const api = {
     update: (id: string, input: FeedInput) =>
       request<Feed>(`/api/feeds/${id}`, jsonBody('PUT', input)),
     remove: (id: string) => request<void>(`/api/feeds/${id}`, { method: 'DELETE' }),
+    /** Replaces the calendar's secret-id; the response carries the new icsUrl. */
+    rotateSecret: (id: string) =>
+      request<Feed>(`/api/feeds/${id}/rotate-secret`, { method: 'POST' }),
     preview: (input: FeedInput, id?: string) =>
       request<PreviewResult>('/api/feeds/preview', jsonBody('POST', id ? { ...input, id } : input)),
     previewSaved: (id: string) => request<PreviewResult>(`/api/feeds/${id}/preview`),

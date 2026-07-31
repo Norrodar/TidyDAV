@@ -6,11 +6,19 @@
   import { confirmDialog } from '$lib/state/confirm.svelte';
   import { t, tf, lang } from '$lib/i18n';
   import { refreshBadge } from '$lib/refresh';
+  import { maskIcsUrl, webcalUrl } from '$lib/share';
 
   let feeds = $state<Feed[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let copied = $state<string | null>(null);
+
+  // The ICS link is a password in URL form: shown abbreviated until the user
+  // asks for it. Purely client-side and per row, reset on every load.
+  let revealed = $state<Record<string, boolean>>({});
+  function toggleReveal(id: string) {
+    revealed[id] = !revealed[id];
+  }
 
   // Per-feed quick preview state, keyed by feed id.
   type PreviewState = {
@@ -97,6 +105,7 @@
   async function load() {
     loading = true;
     error = null;
+    revealed = {};
     try {
       feeds = await api.feeds.list();
     } catch (e) {
@@ -124,17 +133,22 @@
     }
   }
 
-  async function copy(url: string) {
+  // Always copies the full URL, no matter whether the row shows it abbreviated.
+  // When the clipboard is unavailable the link is revealed so it can at least
+  // be selected by hand.
+  async function copy(feed: Feed) {
     if (!navigator.clipboard?.writeText) {
       error = t('copy_failed');
+      revealed[feed.id] = true;
       return;
     }
     try {
-      await navigator.clipboard.writeText(url);
-      copied = url;
+      await navigator.clipboard.writeText(feed.icsUrl);
+      copied = feed.icsUrl;
       setTimeout(() => (copied = null), 1500);
     } catch {
       error = t('copy_failed');
+      revealed[feed.id] = true;
     }
   }
 </script>
@@ -168,7 +182,22 @@
               ></span>
               {feed.name}
             </h2>
-            <code class="url">{feed.icsUrl}</code>
+            <div class="share-line">
+              <code class="url" id={`url-${feed.id}`}
+                >{revealed[feed.id] ? feed.icsUrl : maskIcsUrl(feed.icsUrl)}</code
+              >
+              <button
+                class="linklike"
+                aria-expanded={!!revealed[feed.id]}
+                aria-controls={`url-${feed.id}`}
+                onclick={() => toggleReveal(feed.id)}
+              >
+                {revealed[feed.id] ? t('hide_link') : t('show_link')}
+              </button>
+            </div>
+            {#if revealed[feed.id]}
+              <p class="link-hint">{t('link_hidden_hint')}</p>
+            {/if}
             {#if feed.basicAuthEnabled}
               <p class="auth-hint">{t('basic_auth_hint')}</p>
             {/if}
@@ -191,10 +220,16 @@
             {/if}
           </div>
           <div class="row-actions">
+            <a
+              class="button button-secondary"
+              href={webcalUrl(feed.icsUrl)}
+              rel="noopener"
+              title={t('subscribe_hint')}>{t('subscribe')}</a
+            >
             <button class="button button-secondary" onclick={() => togglePreview(feed)}>
               {previews[feed.id] ? t('hide_preview') : t('preview')}
             </button>
-            <button class="button button-secondary" onclick={() => copy(feed.icsUrl)}>
+            <button class="button button-secondary" onclick={() => copy(feed)}>
               {copied === feed.icsUrl ? t('copied') : t('copy_url')}
             </button>
             <a class="button button-secondary" href={`/feeds/${feed.id}`}>{t('edit')}</a>
@@ -335,10 +370,31 @@
     font-size: var(--text-base);
     margin: 0 0 var(--space-1);
   }
+  .share-line {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    min-width: 0;
+  }
   .url {
     color: var(--text-tertiary);
     font-size: var(--text-xs);
     word-break: break-all;
+  }
+  .linklike {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--accent);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+  }
+  .link-hint {
+    margin: var(--space-1) 0 0;
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+    line-height: 1.5;
   }
   .auth-hint {
     margin: var(--space-1) 0 0;
@@ -380,6 +436,31 @@
   .danger:hover {
     color: var(--danger);
     border-color: var(--danger);
+  }
+  /* Phone layout: the row stacks, the action strip wraps into thumb-sized
+     targets. Desktop is untouched — everything lives inside this query. */
+  @media (max-width: 640px) {
+    .head {
+      flex-wrap: wrap;
+      gap: var(--space-3);
+    }
+    .feed {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .meta {
+      flex-wrap: wrap;
+    }
+    .row-actions {
+      flex-wrap: wrap;
+    }
+    .row-actions .button {
+      flex: 1 1 auto;
+      min-height: 44px;
+    }
+    .share-line {
+      flex-wrap: wrap;
+    }
   }
   .empty {
     align-items: flex-start;

@@ -128,6 +128,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   name and refresh interval survive even when every event is filtered away. The calendar
   list shows a "checks every …" badge for cached feeds, and the editor explains both
   fields.
+- Sharing a calendar link, and taking it back. The ICS URL is now shown abbreviated
+  (`https://dav.example.com/ics/a3f9…`) and only revealed on request, so the secret is
+  not on screen during a screen share. Next to it sit a copy button and a `webcal://`
+  link that subscribes in one click on iOS, macOS and Thunderbird. Because handing out
+  that link is otherwise irreversible, the editor can replace it:
+  `POST /api/feeds/{id}/rotate-secret` issues a new secret, the old URL stops resolving
+  immediately, and the change is audited by calendar id — never with the secret itself.
+  Rotating asks for confirmation first, since every existing subscriber has to be given
+  the new link. Input fields grow to 16px on small screens so iOS stops zooming the page
+  on focus.
 - Alert when a calendar source stops updating, plus an all-clear once it recovers.
   Because the proxy keeps serving the last good copy on every upstream error, a dead
   source was previously invisible — the calendar silently kept showing last year's

@@ -373,6 +373,62 @@ func TestFeedActionsAreAudited(t *testing.T) {
 	}
 }
 
+func TestRotateFeedSecret(t *testing.T) {
+	srv := newTestServer(t)
+	cookies := register(t, srv, "rot@example.com") // first user => admin
+
+	rec := do(t, srv, http.MethodPost, "/api/feeds", `{"name":"Rotate me","sources":[]}`, cookies)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create %d: %s", rec.Code, rec.Body.String())
+	}
+	type feedDTO struct {
+		ID     string `json:"id"`
+		Secret string `json:"secret"`
+		ICSURL string `json:"icsUrl"`
+	}
+	var created feedDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+
+	rec = do(t, srv, http.MethodPost, "/api/feeds/"+created.ID+"/rotate-secret", "", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("rotate %d: %s", rec.Code, rec.Body.String())
+	}
+	var rotated feedDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &rotated); err != nil {
+		t.Fatalf("decode rotate: %v", err)
+	}
+	if rotated.Secret == "" || rotated.Secret == created.Secret {
+		t.Fatalf("secret was not replaced: %q -> %q", created.Secret, rotated.Secret)
+	}
+	if !strings.HasSuffix(rotated.ICSURL, "/ics/"+rotated.Secret) {
+		t.Errorf("response icsUrl %q does not carry the new secret", rotated.ICSURL)
+	}
+	if rotated.ID != created.ID {
+		t.Errorf("rotation changed the feed id: %q -> %q", created.ID, rotated.ID)
+	}
+
+	// The rotation is audited by feed id, without the secret in the detail.
+	rec = do(t, srv, http.MethodGet, "/api/audit", "", cookies)
+	body := rec.Body.String()
+	if !strings.Contains(body, "feed.rotate-secret") || !strings.Contains(body, created.ID) {
+		t.Errorf("audit missing rotate entry: %s", body)
+	}
+	if strings.Contains(body, created.Secret) || strings.Contains(body, rotated.Secret) {
+		t.Errorf("audit log leaked a feed secret: %s", body)
+	}
+
+	// Auth and ownership behave exactly like PUT.
+	if rec := do(t, srv, http.MethodPost, "/api/feeds/"+created.ID+"/rotate-secret", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("no-auth rotate = %d, want 401", rec.Code)
+	}
+	intruder := register(t, srv, "roti@example.com")
+	if rec := do(t, srv, http.MethodPost, "/api/feeds/"+created.ID+"/rotate-secret", "", intruder); rec.Code != http.StatusNotFound {
+		t.Errorf("intruder rotate = %d, want 404", rec.Code)
+	}
+}
+
 func TestFeedNotifications(t *testing.T) {
 	srv := newTestServer(t)
 	cookies := register(t, srv, "n@example.com")

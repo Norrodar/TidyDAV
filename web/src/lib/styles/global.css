@@ -130,6 +130,13 @@ button {
   border-color: var(--accent);
 }
 
+/* iOS zooms the whole page in when a focused field is below 16px. */
+@media (max-width: 640px) {
+  .input {
+    font-size: 16px;
+  }
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

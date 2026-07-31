@@ -37,10 +37,23 @@ func TestOwnershipIsolation(t *testing.T) {
 	} {
 		intruder.get(path).expect(http.StatusNotFound)
 	}
-	intruder.put("/api/feeds/"+feed.ID, map[string]any{
+	put := intruder.put("/api/feeds/"+feed.ID, map[string]any{
 		"name": "Hijacked", "sources": []map[string]any{}, "rules": []map[string]any{},
 	}).expect(http.StatusNotFound)
 	intruder.delete("/api/feeds/" + feed.ID).expect(http.StatusNotFound)
+
+	// Rotating a foreign calendar's link must be indistinguishable from PUT:
+	// same status, same body — and the owner's secret must survive untouched.
+	rotate := intruder.post("/api/feeds/"+feed.ID+"/rotate-secret", nil).expect(http.StatusNotFound)
+	if rotate.text() != put.text() {
+		t.Errorf("rotate answered %q, PUT answered %q — ownership semantics differ",
+			rotate.text(), put.text())
+	}
+	var still feedResult
+	owner.get("/api/feeds/" + feed.ID).expect(http.StatusOK).decode(&still)
+	if still.Secret != feed.Secret {
+		t.Errorf("a foreign rotate changed the owner's secret: %q -> %q", feed.Secret, still.Secret)
+	}
 
 	// The intruder's own list stays empty.
 	var list []feedResult
@@ -67,6 +80,7 @@ func TestAPIRequiresAuthentication(t *testing.T) {
 		{http.MethodPost, "/api/sync"},
 		{http.MethodPost, "/api/sync/preview"},
 		{http.MethodPost, "/api/notify/test"},
+		{http.MethodPost, "/api/feeds/whatever/rotate-secret"},
 		{http.MethodGet, "/api/audit"},
 	} {
 		var body any
