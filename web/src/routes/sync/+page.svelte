@@ -93,6 +93,13 @@
     return isNaN(d.getTime()) ? iso : d.toLocaleString(lang);
   }
 
+  // Explains the "+C ~U -D" counters, and for one-way jobs that the destination
+  // is mirrored (deletions and edits there are undone on the next run).
+  function statusHint(job: SyncJob): string {
+    const hint = t('sync_status_hint');
+    return job.direction === 'bidirectional' ? hint : `${hint} ${t('sync_mirror_hint')}`;
+  }
+
   function statusClass(status: string): string {
     if (status.startsWith('ok')) return 'badge badge-ok';
     if (status.startsWith('error') || status.startsWith('config')) return 'badge badge-error';
@@ -143,7 +150,8 @@
             </div>
             <div class="run">
               <span class="last-run">{t('last_run')}: {formatLastRun(job.lastRunAt)}</span>
-              {#if job.lastStatus}<span class={statusClass(job.lastStatus)}>{job.lastStatus}</span
+              {#if job.lastStatus}<span class={statusClass(job.lastStatus)} title={statusHint(job)}
+                  >{job.lastStatus}</span
                 >{/if}
             </div>
           </div>

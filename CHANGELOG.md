@@ -162,6 +162,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- One-way sync is now a real mirror. It never listed the destination, so an item
+  deleted or edited there stayed that way forever: the source ETag was unchanged, the
+  fast path skipped the item, and the state kept claiming the copy existed. Each run
+  now lists the destination too and repairs what it finds — deleted copies are
+  recreated, edited copies are overwritten (the source wins for one-way jobs).
+  Verification compares body fingerprints (`srcHash`/`dstHash` in the sync state,
+  learned from the destination's own rendering after a write) instead of ETags, so a
+  server that reissues ETags on every listing does not trigger an endless rewrite: a
+  run with nothing to do still writes nothing. The vanish guard that refuses to act on
+  a suddenly empty collection now covers the destination side as well, sync state
+  written by earlier versions is adopted without a mass re-upload, destination items
+  TidyDAV does not manage stay untouched, and the date window keeps protecting
+  out-of-window items from both restore and deletion. Bidirectional jobs are
+  unchanged.
 - **Security:** the upstream cache was keyed by URL alone, so a copy fetched with
   credentials could be served to — or overwritten by — a request that supplied none.
   On a multi-user instance that exposed another user's private calendar to anyone who

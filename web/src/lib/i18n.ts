@@ -280,6 +280,9 @@ const en: Translations = {
   run_now: 'Run now',
   running: 'Running…',
   last_run: 'Last run',
+  sync_status_hint: 'Created / updated / deleted on the destination in the last run.',
+  sync_mirror_hint:
+    'One-way jobs mirror the source: items deleted or edited on the destination are restored on the next run.',
   never: 'never',
   disabled: 'disabled',
   delete_sync_confirm: 'Delete sync job “{name}”?',
@@ -595,6 +598,9 @@ const de: Translations = {
   run_now: 'Jetzt ausführen',
   running: 'Läuft…',
   last_run: 'Letzter Lauf',
+  sync_status_hint: 'Im letzten Lauf am Ziel erstellt / aktualisiert / gelöscht.',
+  sync_mirror_hint:
+    'Einweg-Jobs spiegeln die Quelle: am Ziel gelöschte oder geänderte Einträge werden beim nächsten Lauf wiederhergestellt.',
   never: 'nie',
   disabled: 'deaktiviert',
   delete_sync_confirm: 'Sync-Job „{name}" löschen?',

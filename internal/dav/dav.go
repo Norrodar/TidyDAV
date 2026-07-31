@@ -55,12 +55,21 @@ const (
 
 // ItemState records, per UID, where an item lives and its last-seen ETags on
 // each side, so changes and deletions can be detected between runs.
+//
+// The Hash fields are body fingerprints used by the one-way mirror: ETags alone
+// cannot tell a real edit from a server that reissues ETags on every listing.
+// They are optional and additive — states written before they existed simply
+// carry empty values (see inspectDst).
 type ItemState struct {
 	UID     string `json:"uid"`
 	SrcHref string `json:"srcHref"`
 	SrcETag string `json:"srcETag"`
+	// SrcHash fingerprints the source body as last read.
+	SrcHash string `json:"srcHash,omitempty"`
 	DstHref string `json:"dstHref"`
 	DstETag string `json:"dstETag"`
+	// DstHash fingerprints the destination body as the destination serves it.
+	DstHash string `json:"dstHash,omitempty"`
 }
 
 // State is the persisted sync state for one job, keyed by UID.
