@@ -184,6 +184,30 @@ func (c *client) getBasicAuth(path, user, pass string) *response {
 	return c.send(req)
 }
 
+// getConditional fetches a path with If-None-Match, as a polling calendar
+// client does once it has seen an ETag.
+func (c *client) getConditional(path, ifNoneMatch string) *response {
+	c.t.Helper()
+	req, err := http.NewRequest(http.MethodGet, c.base+path, nil)
+	if err != nil {
+		c.t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("If-None-Match", ifNoneMatch)
+	return c.send(req)
+}
+
+// getBasicAuthConditional combines credentials and If-None-Match.
+func (c *client) getBasicAuthConditional(path, user, pass, ifNoneMatch string) *response {
+	c.t.Helper()
+	req, err := http.NewRequest(http.MethodGet, c.base+path, nil)
+	if err != nil {
+		c.t.Fatalf("new request: %v", err)
+	}
+	req.SetBasicAuth(user, pass)
+	req.Header.Set("If-None-Match", ifNoneMatch)
+	return c.send(req)
+}
+
 // ── Test fixtures ───────────────────────────────────────────────────────────
 
 // feedResult is the subset of the feed API response the tests assert on.

@@ -29,7 +29,10 @@ Pull one or more upstream ICS feeds and serve a clean, cached ICS endpoint:
   case-insensitive substring (for non-techies) or full Go regex.
 - **Merge** several feeds into one (de-duplicated by UID).
 - **Caching** in SQLite with a per-feed TTL, ETag revalidation and stale-on-error
-  fallback, so a dead upstream still serves the last good copy.
+  fallback, so a dead upstream still serves the last good copy. Subscribers get
+  conditional GET (`ETag` / `If-None-Match` → `304 Not Modified`), so a poll that finds
+  nothing new transfers no calendar at all — which needs a TTL > 0 to pay off, since an
+  uncached feed is re-fetched from the upstream on every request anyway.
 - **Live preview** in the UI showing the original vs. transformed events.
 - Served at `/ics/<secret>`, secured by an unguessable secret-id and optional HTTP
   Basic Auth — no session, so any calendar client can subscribe.

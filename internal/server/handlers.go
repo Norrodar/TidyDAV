@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -397,18 +398,70 @@ func (s *Server) handleICS(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "feed could not be rendered")
 		return
 	}
+
+	// Conditional GET. The tag is derived from the body we just rendered, so it
+	// can never outlive the content it describes: a rule change re-renders and
+	// yields a different tag on the very next request. There is deliberately no
+	// render cache behind it — the expensive part (the upstream fetch) is
+	// already cached by the proxy, and what conditional GET saves is the
+	// egress, which it saves in full.
+	etag := entityTag(body)
 	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = w.Write(body)
+	w.Header().Set("ETag", etag)
+	if etagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.WriteHeader(http.StatusNotModified)
+	} else {
+		_, _ = w.Write(body)
+	}
 
-	// Subscriber stats: record that a client fetched this calendar. The write
-	// outlives the request context, which is cancelled as soon as the client
-	// closes the connection after receiving the body.
+	s.markServed(r, f.ID)
+}
+
+// markServed records that a client fetched this calendar. A 304 counts too:
+// the client polled and got an authoritative answer, only the body was left
+// out. The write outlives the request context, which is cancelled as soon as
+// the client closes the connection after receiving the response.
+func (s *Server) markServed(r *http.Request, feedID string) {
 	statsCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 	defer cancel()
-	if err := s.app.Store.MarkFeedServed(statsCtx, f.ID); err != nil {
-		s.app.Log.Warn("mark feed served", "feed", f.ID, "error", err)
+	if err := s.app.Store.MarkFeedServed(statsCtx, feedID); err != nil {
+		s.app.Log.Warn("mark feed served", "feed", feedID, "error", err)
 	}
+}
+
+// entityTag derives a strong ETag from the response body. Content-derived, so
+// it survives a restart: subscribers keep their 304 across container upgrades.
+func entityTag(body []byte) string {
+	sum := sha256.Sum256(body)
+	return `"` + hex.EncodeToString(sum[:16]) + `"`
+}
+
+// etagMatches implements the If-None-Match comparison of RFC 9110 §13.1.2:
+// "*" matches anything, otherwise any list member equal to etag matches.
+//
+// The comparison is weak, i.e. a leading "W/" is stripped on both sides. That
+// is not pedantry: a gzipping reverse proxy (nginx) downgrades a strong ETag to
+// W/"…" and the client sends it back that way.
+//
+// Splitting on commas is naive — a foreign tag containing a quoted comma would
+// be split wrongly — but the only possible outcome of that is a missed match,
+// i.e. a full 200 response. It can never produce a spurious 304.
+func etagMatches(header, etag string) bool {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return false
+	}
+	if header == "*" {
+		return true
+	}
+	etag = strings.TrimPrefix(etag, "W/")
+	for _, candidate := range strings.Split(header, ",") {
+		if strings.TrimPrefix(strings.TrimSpace(candidate), "W/") == etag {
+			return true
+		}
+	}
+	return false
 }
 
 func validBasicAuth(r *http.Request, f *store.Feed) bool {

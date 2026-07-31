@@ -313,7 +313,21 @@ func TestICSBasicAuth(t *testing.T) {
 
 	in.anonymous().get(path).expect(http.StatusUnauthorized)
 	in.anonymous().getBasicAuth(path, "cal", "wrong").expect(http.StatusUnauthorized)
-	in.anonymous().getBasicAuth(path, "cal", "s3cret").expect(http.StatusOK)
+	ok := in.anonymous().getBasicAuth(path, "cal", "s3cret").expect(http.StatusOK)
+
+	// Conditional GET must sit behind the auth gate: a valid ETag is no
+	// substitute for credentials, and a 401 must never turn into a 304.
+	etag := ok.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("protected calendar carried no ETag")
+	}
+	denied := in.anonymous().getConditional(path, etag).expect(http.StatusUnauthorized)
+	if got := denied.Header.Get("ETag"); got != "" {
+		t.Errorf("401 leaked an ETag: %q", got)
+	}
+	in.anonymous().getConditional(path, "*").expect(http.StatusUnauthorized)
+	in.anonymous().getBasicAuthConditional(path, "cal", "wrong", etag).expect(http.StatusUnauthorized)
+	in.anonymous().getBasicAuthConditional(path, "cal", "s3cret", etag).expect(http.StatusNotModified)
 }
 
 // A password without a username used to save silently and leave the link open.
@@ -404,4 +418,90 @@ func uidLines(body string) string {
 		}
 	}
 	return strings.Join(out, "|")
+}
+
+// Calendar clients poll the ICS link every few minutes. When nothing changed
+// they must get a 304 without a body — and when a rule changed, the very next
+// request with the same If-None-Match must return the new calendar.
+func TestConditionalGetOnICS(t *testing.T) {
+	up := newUpstream(t, calendar(
+		vevent("keep@up", "Bin day", "20260702T090000Z"),
+		vevent("drop@up", "Spam Webinar", "20260703T090000Z"),
+	))
+	in := newInstance(t)
+	c := in.newClient()
+	c.register("polling@example.com")
+
+	feed := c.createFeed(map[string]any{
+		"name":       "Polled",
+		"sources":    []map[string]any{{"url": up.URL}},
+		"rules":      []map[string]any{},
+		"ttlSeconds": 3600,
+	})
+	path := icsPath(t, feed.ICSURL)
+
+	first := in.anonymous().get(path).expect(http.StatusOK)
+	etag := first.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("served calendar carried no ETag")
+	}
+	if !strings.Contains(first.text(), "SUMMARY:Bin day") {
+		t.Fatalf("unexpected calendar:\n%s", first.text())
+	}
+	hitsAfterFirst := up.hits.Load()
+
+	// Unchanged: 304, no body, and no headers that only belong to a body.
+	notModified := in.anonymous().getConditional(path, etag).expect(http.StatusNotModified)
+	if len(notModified.Body) != 0 {
+		t.Errorf("304 carried %d bytes of body", len(notModified.Body))
+	}
+	if ct := notModified.Header.Get("Content-Type"); ct != "" {
+		t.Errorf("304 kept Content-Type %q", ct)
+	}
+	if cl := notModified.Header.Get("Content-Length"); cl != "" {
+		t.Errorf("304 kept Content-Length %q", cl)
+	}
+	if got := notModified.Header.Get("ETag"); got != etag {
+		t.Errorf("304 ETag = %q, want %q", got, etag)
+	}
+	if up.hits.Load() != hitsAfterFirst {
+		t.Errorf("cached feed hit the upstream again: %d -> %d", hitsAfterFirst, up.hits.Load())
+	}
+
+	// A rule change must invalidate the tag immediately.
+	c.put("/api/feeds/"+feed.ID, map[string]any{
+		"name":    "Polled",
+		"sources": []map[string]any{{"url": up.URL}},
+		"rules": []map[string]any{
+			{"type": "filter", "filterMode": "blacklist", "matchMode": "substring",
+				"pattern": "bin day", "fields": []string{"SUMMARY"}},
+		},
+		"ttlSeconds": 3600,
+	}).expect(http.StatusOK)
+
+	changed := in.anonymous().getConditional(path, etag).expect(http.StatusOK)
+	newETag := changed.Header.Get("ETag")
+	if newETag == "" || newETag == etag {
+		t.Fatalf("ETag did not change after the rule change: %q", newETag)
+	}
+	if strings.Contains(changed.text(), "SUMMARY:Bin day") {
+		t.Errorf("blacklisted event still served:\n%s", changed.text())
+	}
+	if !strings.Contains(changed.text(), "SUMMARY:Spam Webinar") {
+		t.Errorf("remaining event missing:\n%s", changed.text())
+	}
+
+	// The new tag conditions again, weakened form included.
+	in.anonymous().getConditional(path, newETag).expect(http.StatusNotModified)
+	in.anonymous().getConditional(path, "W/"+newETag).expect(http.StatusNotModified)
+
+	// Every one of those five requests is a fetch, 304s included.
+	var after feedResult
+	c.get("/api/feeds/" + feed.ID).expect(http.StatusOK).decode(&after)
+	if after.ServeCount != 5 {
+		t.Errorf("serveCount = %d, want 5 (304s count as fetches)", after.ServeCount)
+	}
+	if after.LastServedAt == "" {
+		t.Error("lastServedAt not set")
+	}
 }

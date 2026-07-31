@@ -150,6 +150,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Checks run on the notifier schedule (`TIDYDAV_NOTIFY_INTERVAL`, 15 minutes by
   default), which bounds how quickly the warning can arrive. The health dot in the
   calendar list now uses the same threshold instead of a fixed 24 hours.
+- Conditional GET on `/ics/<secret>`: every served calendar carries a strong `ETag`
+  derived from the rendered body, and a request repeating it in `If-None-Match` is
+  answered with `304 Not Modified` and no body. Calendar clients poll every few
+  minutes, so this removes the bulk of the traffic an unchanged calendar used to cost —
+  worthwhile once the feed has a TTL > 0, since an uncached feed still re-fetches its
+  upstream on every request. There is deliberately no render cache behind it: the tag
+  describes the body just rendered, so a rule change invalidates it on the very next
+  request and a stale calendar cannot be served. Comparison follows RFC 9110 §13.1.2,
+  including the weak form a gzipping reverse proxy hands back. `304` reaches
+  Basic-Auth-protected calendars only after successful authentication, and it still
+  counts as a fetch in the subscriber statistics.
 
 ### Changed
 

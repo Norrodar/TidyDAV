@@ -527,3 +527,208 @@ func TestFeedNotificationsSourceStaleHours(t *testing.T) {
 		t.Errorf("negative threshold not clamped: %s", rec.Body.String())
 	}
 }
+
+// getICS fetches the ICS endpoint with optional If-None-Match and credentials.
+func getICS(t *testing.T, srv *server.Server, path, ifNoneMatch, user, pass string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	if ifNoneMatch != "" {
+		req.Header.Set("If-None-Match", ifNoneMatch)
+	}
+	if user != "" || pass != "" {
+		req.SetBasicAuth(user, pass)
+	}
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+// newICSFeed creates a calendar backed by upstream and returns id and secret.
+func newICSFeed(t *testing.T, srv *server.Server, cookies []*http.Cookie, body map[string]any) (id, secret string) {
+	t.Helper()
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	rec := do(t, srv, http.MethodPost, "/api/feeds", string(raw), cookies)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create %d: %s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		ID     string `json:"id"`
+		Secret string `json:"secret"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	return created.ID, created.Secret
+}
+
+func icsUpstreamServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(icsUpstream))
+	}))
+	t.Cleanup(up.Close)
+	return up
+}
+
+// serveCount reads back the subscriber statistics of a calendar.
+func serveCount(t *testing.T, srv *server.Server, id string, cookies []*http.Cookie) (int64, string) {
+	t.Helper()
+	rec := do(t, srv, http.MethodGet, "/api/feeds/"+id, "", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("read feed %d: %s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		ServeCount   int64  `json:"serveCount"`
+		LastServedAt string `json:"lastServedAt"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode feed: %v", err)
+	}
+	return got.ServeCount, got.LastServedAt
+}
+
+// A polling calendar client that echoes the ETag back gets 304 and no body.
+func TestICSConditionalGet(t *testing.T) {
+	up := icsUpstreamServer(t)
+	srv := newTestServer(t)
+	cookies := register(t, srv, "cond@example.com")
+	_, secret := newICSFeed(t, srv, cookies, map[string]any{
+		"name": "Polled", "sources": []map[string]any{{"url": up.URL}}, "ttlSeconds": 3600,
+	})
+	path := "/ics/" + secret
+
+	first := getICS(t, srv, path, "", "", "")
+	if first.Code != http.StatusOK {
+		t.Fatalf("first GET %d: %s", first.Code, first.Body.String())
+	}
+	etag := first.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("first GET carried no ETag")
+	}
+	if !strings.Contains(first.Body.String(), "SUMMARY:Keep") {
+		t.Fatalf("unexpected body:\n%s", first.Body.String())
+	}
+
+	second := getICS(t, srv, path, etag, "", "")
+	if second.Code != http.StatusNotModified {
+		t.Fatalf("conditional GET %d, want 304 (%s)", second.Code, second.Body.String())
+	}
+	if second.Body.Len() != 0 {
+		t.Errorf("304 carried a body of %d bytes", second.Body.Len())
+	}
+	if got := second.Header().Get("ETag"); got != etag {
+		t.Errorf("304 ETag = %q, want %q", got, etag)
+	}
+
+	// A weakened tag (what a gzipping reverse proxy hands back) matches too.
+	if rec := getICS(t, srv, path, "W/"+etag, "", ""); rec.Code != http.StatusNotModified {
+		t.Errorf("weak If-None-Match = %d, want 304", rec.Code)
+	}
+	// A foreign tag does not.
+	if rec := getICS(t, srv, path, `"deadbeef"`, "", ""); rec.Code != http.StatusOK {
+		t.Errorf("foreign If-None-Match = %d, want 200", rec.Code)
+	}
+}
+
+// Clients that do not send If-None-Match must see exactly what they saw before
+// the conditional-GET support was added.
+func TestICSWithoutIfNoneMatchIsUnchanged(t *testing.T) {
+	up := icsUpstreamServer(t)
+	srv := newTestServer(t)
+	cookies := register(t, srv, "plain@example.com")
+	_, secret := newICSFeed(t, srv, cookies, map[string]any{
+		"name": "Plain", "sources": []map[string]any{{"url": up.URL}},
+	})
+
+	rec := getICS(t, srv, "/ics/"+secret, "", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/calendar; charset=utf-8" {
+		t.Errorf("content-type = %q", ct)
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("cache-control = %q, want no-cache", cc)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "BEGIN:VCALENDAR") || !strings.Contains(body, "SUMMARY:Keep") {
+		t.Errorf("truncated body:\n%s", body)
+	}
+}
+
+// A 304 is still a fetch, so it must show up in the subscriber statistics.
+func TestICSNotModifiedCountsAsServe(t *testing.T) {
+	up := icsUpstreamServer(t)
+	srv := newTestServer(t)
+	cookies := register(t, srv, "stats304@example.com")
+	id, secret := newICSFeed(t, srv, cookies, map[string]any{
+		"name": "Counted", "sources": []map[string]any{{"url": up.URL}}, "ttlSeconds": 3600,
+	})
+	path := "/ics/" + secret
+
+	first := getICS(t, srv, path, "", "", "")
+	if first.Code != http.StatusOK {
+		t.Fatalf("first GET %d", first.Code)
+	}
+	if rec := getICS(t, srv, path, first.Header().Get("ETag"), "", ""); rec.Code != http.StatusNotModified {
+		t.Fatalf("second GET %d, want 304", rec.Code)
+	}
+
+	count, last := serveCount(t, srv, id, cookies)
+	if count != 2 || last == "" {
+		t.Errorf("serve stats = (%d, %q), want 2 with a timestamp", count, last)
+	}
+}
+
+// Conditional GET must never leak past HTTP Basic Auth.
+func TestICSProtectedFeedNeverReturns304(t *testing.T) {
+	up := icsUpstreamServer(t)
+	srv := newTestServer(t)
+	cookies := register(t, srv, "prot@example.com")
+	id, secret := newICSFeed(t, srv, cookies, map[string]any{
+		"name": "Protected", "sources": []map[string]any{{"url": up.URL}},
+		"basicAuthUser": "cal", "basicAuthPassword": "s3cret", "ttlSeconds": 3600,
+	})
+	path := "/ics/" + secret
+
+	// Get a valid tag through the front door first, so the test below really
+	// checks the auth gate and not just an unknown tag.
+	ok := getICS(t, srv, path, "", "cal", "s3cret")
+	if ok.Code != http.StatusOK {
+		t.Fatalf("authenticated GET %d: %s", ok.Code, ok.Body.String())
+	}
+	etag := ok.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("authenticated GET carried no ETag")
+	}
+
+	for _, tc := range []struct{ name, user, pass string }{
+		{"anonymous", "", ""},
+		{"wrong password", "cal", "wrong"},
+		{"wrong user", "nope", "s3cret"},
+	} {
+		rec := getICS(t, srv, path, etag, tc.user, tc.pass)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s: status = %d, want 401", tc.name, rec.Code)
+		}
+		if got := rec.Header().Get("ETag"); got != "" {
+			t.Errorf("%s: 401 leaked ETag %q", tc.name, got)
+		}
+		if rec.Header().Get("WWW-Authenticate") == "" {
+			t.Errorf("%s: 401 without WWW-Authenticate", tc.name)
+		}
+	}
+
+	// Rejected requests must not count as fetches; only the one good GET does.
+	if count, _ := serveCount(t, srv, id, cookies); count != 1 {
+		t.Errorf("serveCount = %d, want 1 (only the authenticated GET)", count)
+	}
+
+	// With credentials, the conditional GET works as usual.
+	if rec := getICS(t, srv, path, etag, "cal", "s3cret"); rec.Code != http.StatusNotModified {
+		t.Errorf("authenticated conditional GET = %d, want 304", rec.Code)
+	}
+}

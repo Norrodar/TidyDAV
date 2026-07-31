@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Norrodar/TidyDAV/internal/ics"
 	"github.com/Norrodar/TidyDAV/internal/proxy"
@@ -391,5 +392,70 @@ func TestRenderNoSourcesIsEmpty(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "BEGIN:VCALENDAR") {
 		t.Errorf("expected empty calendar, got:\n%s", out)
+	}
+}
+
+// An old event pushes the VTIMEZONE window against its clamp, and the clamped
+// bound is written verbatim into the generated VTIMEZONE's first observance.
+// With a second-precision anchor the rendered feed changed on every request,
+// which would make the conditional-GET ETag on /ics useless.
+func TestEventWindowIsStableWithinADay(t *testing.T) {
+	cal, err := ics.Parse(strings.NewReader(
+		"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//up//EN\r\n" +
+			"BEGIN:VEVENT\r\nUID:old@up\r\nDTSTAMP:20180101T000000Z\r\nSUMMARY:Old\r\n" +
+			"DTSTART;TZID=Europe/Berlin:20180706T100000\r\nEND:VEVENT\r\n" +
+			"END:VCALENDAR\r\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	base := time.Date(2026, 7, 31, 18, 5, 30, 0, time.UTC)
+	lo1, hi1 := eventWindow(cal, base)
+	lo2, hi2 := eventWindow(cal, base.Add(90*time.Second))
+	if !lo1.Equal(lo2) || !hi1.Equal(hi2) {
+		t.Errorf("window moved within the same day: [%s, %s] vs [%s, %s]", lo1, hi1, lo2, hi2)
+	}
+
+	// The clamp bit, so the lower bound is the quantised anchor itself.
+	if want := time.Date(2023, 7, 31, 0, 0, 0, 0, time.UTC); !lo1.Equal(want) {
+		t.Errorf("lower bound = %s, want midnight UTC %s", lo1, want)
+	}
+}
+
+// Regression: two renders of the same feed at different wall-clock times must
+// produce identical bytes, otherwise every conditional GET on /ics would miss.
+func TestRenderIsByteStableWhenWindowIsClamped(t *testing.T) {
+	const old = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//up//EN\r\n" +
+		"BEGIN:VEVENT\r\nUID:old@up\r\nDTSTAMP:20180101T000000Z\r\nSUMMARY:Old\r\n" +
+		"DTSTART;TZID=Europe/Berlin:20180706T100000\r\nEND:VEVENT\r\n" +
+		"END:VCALENDAR\r\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(old))
+	}))
+	defer srv.Close()
+
+	svc := newSvc(t)
+	clock := time.Date(2026, 7, 31, 18, 5, 30, 0, time.UTC)
+	svc.now = func() time.Time { return clock }
+
+	f := &store.Feed{
+		ID: "stable", Secret: "stable", TTLSeconds: 3600,
+		Sources: []store.FeedSource{{URL: srv.URL}},
+	}
+	first, err := svc.Render(context.Background(), f)
+	if err != nil {
+		t.Fatalf("first Render: %v", err)
+	}
+	if !strings.Contains(string(first), "BEGIN:VTIMEZONE") {
+		t.Fatalf("expected a generated VTIMEZONE:\n%s", first)
+	}
+
+	clock = clock.Add(90 * time.Second)
+	second, err := svc.Render(context.Background(), f)
+	if err != nil {
+		t.Fatalf("second Render: %v", err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Errorf("render is not byte-stable across 90s:\n--- first ---\n%s\n--- second ---\n%s", first, second)
 	}
 }

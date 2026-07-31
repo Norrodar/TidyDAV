@@ -26,11 +26,15 @@ import (
 type Service struct {
 	fetcher *proxy.Fetcher
 	log     *slog.Logger
+	// now is the clock used for the generated VTIMEZONE window. Injectable for
+	// tests; set once in NewService and only read afterwards, so it adds no
+	// shared mutable state.
+	now func() time.Time
 }
 
 // NewService creates a feed render service.
 func NewService(fetcher *proxy.Fetcher, log *slog.Logger) *Service {
-	return &Service{fetcher: fetcher, log: log}
+	return &Service{fetcher: fetcher, log: log, now: time.Now}
 }
 
 // EventSummary is a compact view of an event for previews/diffs.
@@ -216,7 +220,7 @@ func (s *Service) attachTimezones(cal *ical.Calendar, upstream map[string]*ical.
 	if len(tzids) == 0 {
 		return
 	}
-	from, to := eventWindow(cal)
+	from, to := eventWindow(cal, s.now().UTC())
 	defs := make([]*ical.Component, 0, len(tzids))
 	for _, tzid := range tzids {
 		if def, ok := upstream[tzid]; ok {
@@ -261,8 +265,17 @@ func referencedTZIDs(cal *ical.Calendar) []string {
 // event dated far in the future (year 2099 shows up in birthday feeds and in
 // broken exports) would otherwise cost hundreds of thousands of iterations on
 // every request. Observances outside the clamp are of no practical use anyway.
-func eventWindow(cal *ical.Calendar) (time.Time, time.Time) {
-	now := time.Now().UTC()
+//
+// now is quantised to midnight UTC. Whenever the clamp bites — the common case
+// for bin-collection, birthday and school-holiday feeds — the window bound ends
+// up verbatim in the generated VTIMEZONE's first observance (ics.VTimezone
+// anchors it at from, DTSTART is written to the second). A second-precision
+// anchor would make every render produce different bytes, which would defeat
+// the conditional-GET ETag. Quantised, the rendered feed is byte-stable for a
+// whole day.
+func eventWindow(cal *ical.Calendar, now time.Time) (time.Time, time.Time) {
+	y, m, d := now.UTC().Date()
+	now = time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 	minLo, maxHi := now.AddDate(-tzWindowPastYears, 0, 0), now.AddDate(tzWindowFutureYears, 0, 0)
 
 	var lo, hi time.Time
